@@ -34,8 +34,11 @@ static const volatile char rcsid[] = "@(#)$Id: s_user.c,v 1.280 2010/08/12 16:29
 #include "common_def.h"
 #include "s_conf_ext.h" // For conf and CFLAG definitions
 
-/* * m_webirc - Robust Version
- * Checks both Hostname and IP to prevent DNS race conditions.
+/* * m_webirc - Robust Version for IRCNet
+ * - Authenticates Gateway
+ * - Spoofs IP
+ * - Triggers NEW DNS lookup using gethost_byaddr
+ * - Forces ident to 'webchat'
  */
 int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
 {
@@ -47,11 +50,10 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     if (IsRegistered(sptr))
         return 0;
 
-    /* Get the raw IP address string for comparison */
+    /* Get the raw IP address string of the gateway for comparison */
 #ifdef INET6
     inetntop(AF_INET6, (char *)&cptr->ip, ipbuf, sizeof(ipbuf));
 #else
-    /* Cast to char* to match existing code style in this version */
     strcpy(ipbuf, (char *)inetntoa((char *)&cptr->ip)); 
 #endif
 
@@ -67,9 +69,7 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
             /* CIDR Match */
             if (match_ipmask(aconf->host, cptr, 0)) continue;
         } else {
-            /* String Match: Check Sockhost OR Raw IP 
-             * This ensures that if sockhost is resolved to a name, we still match the IP
-             */
+            /* String Match: Check Sockhost OR Raw IP */
             if (match(aconf->host, cptr->sockhost) != 0 && match(aconf->host, ipbuf) != 0) 
                 continue;
         }
@@ -87,7 +87,7 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
         return -1;
     }
 
-    /* --- Stop DNS and Ident Checks --- */
+    /* --- Stop previous DNS and Ident Checks --- */
     if (DoingDNS(cptr)) {
         ClearDNS(cptr);
     }
@@ -96,15 +96,9 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     }
     
     /* --- Apply the spoofed details --- */
-    
-    /* 1. Update Hostname */
-    strncpyzt(cptr->sockhost, parv[3], HOSTLEN+1);
 
-    /* 2. Update IP */
+    /* 1. Update IP Address FIRST */
 #ifdef INET6
-    /* Server is compiled with IPv6 support.
-     * We must check if the provided IP is IPv6 or IPv4.
-     */
     if (strchr(parv[4], ':')) 
     {
         /* It is already an IPv6 address */
@@ -112,9 +106,7 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     }
     else
     {
-        /* It is an IPv4 address. We must map it to IPv6 (::ffff:x.x.x.x)
-         * because cptr->ip is a struct in6_addr and cannot hold a raw v4 int.
-         */
+        /* It is an IPv4 address. Map to IPv6 (::ffff:x.x.x.x) */
         char ip6buf[64];
         snprintf(ip6buf, sizeof(ip6buf), "::ffff:%s", parv[4]);
         inet_pton(AF_INET6, ip6buf, &cptr->ip);
@@ -123,6 +115,29 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     /* Standard IPv4-only server */
     cptr->ip.s_addr = inet_addr(parv[4]);
 #endif
+
+    /* 2. Force Ident to 'webchat' */
+    strncpyzt(cptr->username, "webchat", USERLEN+1);
+    cptr->flags |= FLAGS_GOTID;
+
+    /* 3. Handle Hostname & DNS */
+    /* Set the hostname to the IP string temporarily. */
+    strncpyzt(cptr->sockhost, parv[4], HOSTLEN+1);
+
+    /* Trigger a NEW DNS lookup (Corrected Logic) */
+    {
+        Link lin;
+        lin.flags = ASYNC_CLIENT;
+        lin.value.cptr = cptr;
+        lin.next = NULL;
+        
+        /* Initiate the lookup for the NEW IP address */
+        cptr->hostp = gethost_byaddr((char *)&cptr->ip, &lin);
+        
+        /* If not returned immediately, mark as Waiting for DNS */
+        if (!cptr->hostp)
+            SetDNS(cptr);
+    }
 
     return 0;
 }
