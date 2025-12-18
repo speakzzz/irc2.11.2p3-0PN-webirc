@@ -1,24 +1,27 @@
 /************************************************************************
- *   IRC - Internet Relay Chat, common/struct_def.h
- *   Copyright (C) 1990 Jarkko Oikarinen and
- *                      University of Oulu, Computing Center
+ * IRC - Internet Relay Chat, common/struct_def.h
+ * Copyright (C) 1990 Jarkko Oikarinen and
+ * University of Oulu, Computing Center
  *
- *   This program is free software; you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation; either version 1, or (at your option)
- *   any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 1, or (at your option)
+ * any later version.
  *
- *   This program is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *   GNU General Public License for more details.
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *   You should have received a copy of the GNU General Public License
- *   along with this program; if not, write to the Free Software
- *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *   $Id: struct_def.h,v 1.151 2009/11/13 20:08:10 chopin Exp $
+ * $Id: struct_def.h,v 1.151 2009/11/13 20:08:10 chopin Exp $
  */
+
+#ifndef STRUCT_DEF_H
+#define STRUCT_DEF_H
 
 typedef	struct	ConfItem aConfItem;
 typedef	struct	ListItem aListItem;
@@ -403,13 +406,14 @@ struct	ListItem	{
 #define CFLAG_NORESOLVE		0x00010
 #define CFLAG_FALL		0x00020
 #define CFLAG_NORESOLVEMATCH	0x00040
-#define CFLAG_WEBIRC        	0x00400
 #ifdef XLINE
 #define CFLAG_XEXEMPT		0x00080
 #endif
 #ifdef SPOOF
 #define CFLAG_SPOOFED       0x00200
 #endif
+/* ADDED WEBIRC FLAG */
+#define CFLAG_WEBIRC        0x00400
 
 #define IsConfRestricted(x)	((x)->flags & CFLAG_RESTRICTED)
 #define IsConfRNoDNS(x)		((x)->flags & CFLAG_RNODNS)
@@ -1127,3 +1131,4 @@ typedef struct
 #define CCL_ALL      (CCL_CONN|CCL_CONNINFO|CCL_QUIT|CCL_QUITINFO|CCL_NICK) /* -- mh 20200118 */
 #endif
 
+#endif /* STRUCT_DEF_H */
