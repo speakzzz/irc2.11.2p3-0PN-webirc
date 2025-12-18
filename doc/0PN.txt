@@ -1,0 +1,272 @@
+######################################################################
+
+0PN - IRCnet open server patch pack for irc2.11.2p3
+
+######################################################################
+
+patches included:
+
+ ccl_all    v1.00 CCL_ALL macro (see doc/ccl_all.txt)
+ chanjupe   v3    channel jupe (see doc/chanjupe.txt)
+ confsplit  v1.02 SS/SU values in ircd.conf (see doc/confsplit.txt)
+ CVS3       v1.00 cvs irc2.11.3 minor fixes (see doc/CVS3.txt)
+ passopts   v1.01 extended PASS options (see doc/passopts.txt)
+ passwdlen  v1.00 PASSWDLEN define (see doc/passwdlen.txt)
+ spoof      v1.02 host spoofs/IP cloaks (see doc/spoof.txt)
+ versionlen v1.00 VERSIONLEN define (see doc/versionlen.txt)
+ whoisextra v1.00 RPL_WHOISEXTRA numeric 320 (see doc/whoisextra.txt)
+ whoistls   v1.00 SSL/TLS RPL_WHOISTLS reply (see doc/whoistls.txt)
+
+config.h changes (added by patches):
+
+ disable TEST0PN
+ disapbe CONFSPLIT (SS/SU values in ircd.conf)
+ disable CONFSPLIT_REHASH (rehashable SS/SU values)
+ enable  WHOISTLS (RPL_WHOISEXTRA in /WHOIS reply)
+ enable  WHOISTLS_NOTICE (notice on connect)
+ enable  CVS3
+ enable  PASSOPTS
+ change  PASSWDLEN from 20 to 128
+ enable  SPOOF
+ enable  SPOOF_NOTICE (notice on connect)
+ enable  SPOOF_STATSDEFINE (spoof defines in /STATS d)
+ enable  SPOOF_WHOISCLOAKED (RPL_WHOISEXTRA in /WHOIS reply)
+ change  VERSIONLEN from 15 to 32
+ enable  WHOISEXTRA (numeric 320 RPL_WHOISEXTRA)
+
+ config.h changes (from currently used config.h):
+
+ enable  CHANJUPE
+ change  CLIENT_FLOOD from 1000 to 8000
+ enable  CLIENTS_CHANNEL (&clients) with CCL_ALL and CCL_CHANJUPE
+ enable  CONFIG_DIRECTIVE_INCLUDE
+ enable  CRYPT_OPER_PASSWORD
+ enable  DEFAULT_INVISIBLE
+ change  DEFAULT_SPLIT_SERVERS from 80 to 45
+ change  DEFAULT_SPLIT_USERS from 65000 to 20000
+ enable  DISABLE_NICK0_REGISTRATION
+ enable  DISABLE_STATSTKLINE
+ enable  ENABLE_SIDTRACE
+ enable  FAILED_OPERLOG
+ change  IRCDCONF_DELIMITER to '|'
+ enable  LOG_SERVER_CHANNELS and all LOG_SCH_*R
+ enable  LOGFILES_ALWAYS_CREATE
+ change  MAXCHANNELSPERUSER from 21 to 42
+ change  MAXCONNECTIONS from 50 to 16384
+ enable  MOTD_UNREG
+ disable OPER_KILL_REMOTE
+ disable OPER_SQUIT_REMOTE
+ change  SCH_TKILL from SCH_NOTICE to SCH_OPER
+ change  SPLIT_SERVERS from 50 to 10
+ change  SPLIT_USERS from 50000 to 5000
+ define  SSL_CERT_PATH
+ define  SSL_PRIVKEY_PATH
+ enable  USE_SERVICES
+ enable  XLINE
+ enable  ZIP_LINKS
+
+######################################################################
+
+changelog:
+
+ v1.06
+
+ 2020-12-06
+
+  * skipped changelog a while. will probably rewrite this mess of
+    txt-files soon
+
+ v1.02
+
+ 2020-04-28
+
+  * included patch whoistls v1.00
+
+  * added TEST0PN define and supporting changes in config.h.dist to
+    make local testing easier
+
+ 2020-04-27
+
+  * included patch CVS3 v1.00
+
+  * ircd/s_serv.c:m_sidtrace(): show real ip of spoofed clients in
+    SIDTRACE (by br)
+
+  * ircd/s_serv.c:m_etrace(): show real ip of spoofed clients in
+    ETRACE (by br)
+
+  * ircd/chkconf.c:initconf(): add SIDTRACE flag 'v' to allowed flags
+    (by BR)
+
+  * patch is no longer generated with docs prepended to the diff
+
+ v1.01
+
+ 2020-01-27 -- mh
+
+  * updated spoof from v1.01 to v1.02 (bug fix)
+
+ v1.00
+
+ 2020-01-18 -- mh
+
+  * also from currently used config.h copied DEFAULT_INVISIBLE,
+    SCH_TKILL, OPER_SQUIT_REMOTE, OPER_KILL_REMOTE, MAXCONNECTIONS,
+    CONFIG_DIRECTIVE_INCLUDE, LOG_SERVER_CHANNELS, LOG_SCH_*, XLINE,
+    FAILED_OPERLOG, LOGFILES_ALWAYS_CREATE, CRYPT_OPER_PASSWORD,
+    CLIENT_FLOOD, USE_SERVICES, ZIP_LINKS, DISABLE_STATSTKLINE,
+    IRCDCONF_DELIMITER, MAXCHANNELSPERUSER, DEFAULT_SPLIT_USERS,
+    DEFAULT_SPLIT_SERVERS, MOTD_UNREG, DISABLE_NICK0_REGISTRATION,
+    ENABLE_SIDTRACE, SPLIT_USERS, and SPLIT_SERVERS
+
+  * copied SSL_PRIVKEY_PATH and SSL_CERT_PATH from config.h currently
+    used on 0PN - not sure they are actually needed though
+
+  * enable CLIENT_CHANNEL with CCL_ALL and CCL_CHANJUPE in config.h
+
+  * enable CHANJUPE in config.h
+
+  * included patch ccl_all v1.00
+
+  * included patch chanjupe v3
+
+  * included patch spoof v1.01 (with passopts v1.01, passwdlen v1.00,
+    versionlen v1.00, and whoisextra v1.00)
+
+######################################################################
+######################################################################
+
+0PN - IRCnet open server patch pack for irc2.11.2p3
+
+######################################################################
+
+patches included:
+
+ ccl_all    v1.00 CCL_ALL macro (see doc/ccl_all.txt)
+ chanjupe   v3    channel jupe (see doc/chanjupe.txt)
+ confsplit  v1.02 SS/SU values in ircd.conf (see doc/confsplit.txt)
+ CVS3       v1.00 cvs irc2.11.3 minor fixes (see doc/CVS3.txt)
+ passopts   v1.01 extended PASS options (see doc/passopts.txt)
+ passwdlen  v1.00 PASSWDLEN define (see doc/passwdlen.txt)
+ spoof      v1.02 host spoofs/IP cloaks (see doc/spoof.txt)
+ versionlen v1.00 VERSIONLEN define (see doc/versionlen.txt)
+ whoisextra v1.00 RPL_WHOISEXTRA numeric 320 (see doc/whoisextra.txt)
+ whoistls   v1.00 SSL/TLS RPL_WHOISTLS reply (see doc/whoistls.txt)
+
+config.h changes (added by patches):
+
+ disable TEST0PN
+ disapbe CONFSPLIT (SS/SU values in ircd.conf)
+ disable CONFSPLIT_REHASH (rehashable SS/SU values)
+ enable  WHOISTLS (RPL_WHOISEXTRA in /WHOIS reply)
+ enable  WHOISTLS_NOTICE (notice on connect)
+ enable  CVS3
+ enable  PASSOPTS
+ change  PASSWDLEN from 20 to 128
+ enable  SPOOF
+ enable  SPOOF_NOTICE (notice on connect)
+ enable  SPOOF_STATSDEFINE (spoof defines in /STATS d)
+ enable  SPOOF_WHOISCLOAKED (RPL_WHOISEXTRA in /WHOIS reply)
+ change  VERSIONLEN from 15 to 32
+ enable  WHOISEXTRA (numeric 320 RPL_WHOISEXTRA)
+
+ config.h changes (from currently used config.h):
+
+ enable  CHANJUPE
+ change  CLIENT_FLOOD from 1000 to 8000
+ enable  CLIENTS_CHANNEL (&clients) with CCL_ALL and CCL_CHANJUPE
+ enable  CONFIG_DIRECTIVE_INCLUDE
+ enable  CRYPT_OPER_PASSWORD
+ enable  DEFAULT_INVISIBLE
+ change  DEFAULT_SPLIT_SERVERS from 80 to 45
+ change  DEFAULT_SPLIT_USERS from 65000 to 20000
+ enable  DISABLE_NICK0_REGISTRATION
+ enable  DISABLE_STATSTKLINE
+ enable  ENABLE_SIDTRACE
+ enable  FAILED_OPERLOG
+ change  IRCDCONF_DELIMITER to '|'
+ enable  LOG_SERVER_CHANNELS and all LOG_SCH_*R
+ enable  LOGFILES_ALWAYS_CREATE
+ change  MAXCHANNELSPERUSER from 21 to 42
+ change  MAXCONNECTIONS from 50 to 16384
+ enable  MOTD_UNREG
+ disable OPER_KILL_REMOTE
+ disable OPER_SQUIT_REMOTE
+ change  SCH_TKILL from SCH_NOTICE to SCH_OPER
+ change  SPLIT_SERVERS from 50 to 10
+ change  SPLIT_USERS from 50000 to 5000
+ define  SSL_CERT_PATH
+ define  SSL_PRIVKEY_PATH
+ enable  USE_SERVICES
+ enable  XLINE
+ enable  ZIP_LINKS
+
+######################################################################
+
+changelog:
+
+ v1.06
+
+ 2020-12-06
+
+  * skipped changelog a while. will probably rewrite this mess of
+    txt-files soon
+
+ v1.02
+
+ 2020-04-28
+
+  * included patch whoistls v1.00
+
+  * added TEST0PN define and supporting changes in config.h.dist to
+    make local testing easier
+
+ 2020-04-27
+
+  * included patch CVS3 v1.00
+
+  * ircd/s_serv.c:m_sidtrace(): show real ip of spoofed clients in
+    SIDTRACE (by br)
+
+  * ircd/s_serv.c:m_etrace(): show real ip of spoofed clients in
+    ETRACE (by br)
+
+  * ircd/chkconf.c:initconf(): add SIDTRACE flag 'v' to allowed flags
+    (by BR)
+
+  * patch is no longer generated with docs prepended to the diff
+
+ v1.01
+
+ 2020-01-27 -- mh
+
+  * updated spoof from v1.01 to v1.02 (bug fix)
+
+ v1.00
+
+ 2020-01-18 -- mh
+
+  * also from currently used config.h copied DEFAULT_INVISIBLE,
+    SCH_TKILL, OPER_SQUIT_REMOTE, OPER_KILL_REMOTE, MAXCONNECTIONS,
+    CONFIG_DIRECTIVE_INCLUDE, LOG_SERVER_CHANNELS, LOG_SCH_*, XLINE,
+    FAILED_OPERLOG, LOGFILES_ALWAYS_CREATE, CRYPT_OPER_PASSWORD,
+    CLIENT_FLOOD, USE_SERVICES, ZIP_LINKS, DISABLE_STATSTKLINE,
+    IRCDCONF_DELIMITER, MAXCHANNELSPERUSER, DEFAULT_SPLIT_USERS,
+    DEFAULT_SPLIT_SERVERS, MOTD_UNREG, DISABLE_NICK0_REGISTRATION,
+    ENABLE_SIDTRACE, SPLIT_USERS, and SPLIT_SERVERS
+
+  * copied SSL_PRIVKEY_PATH and SSL_CERT_PATH from config.h currently
+    used on 0PN - not sure they are actually needed though
+
+  * enable CLIENT_CHANNEL with CCL_ALL and CCL_CHANJUPE in config.h
+
+  * enable CHANJUPE in config.h
+
+  * included patch ccl_all v1.00
+
+  * included patch chanjupe v3
+
+  * included patch spoof v1.01 (with passopts v1.01, passwdlen v1.00,
+    versionlen v1.00, and whoisextra v1.00)
+
+######################################################################

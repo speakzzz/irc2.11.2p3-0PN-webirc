@@ -1,0 +1,42 @@
+######################################################################
+
+ccl_all - CLIENTS_CHANNEL_LEVEL CCL_ALL macro for irc2.11.2p3
+
+######################################################################
+
+CLIENTS_CHANNEL_LEVEL config.h define CCL_ALL macro defined to:
+
+(CCL_CONN|CCL_CONNINFO|CCL_QUIT|CCL_QUITINFO|CCL_NICK)
+
+######################################################################
+
+changelog:
+
+ v1.00
+
+ 2020-01-18 -- mh
+
+  * initial version
+
+######################################################################
+######################################################################
+
+ccl_all - CLIENTS_CHANNEL_LEVEL CCL_ALL macro for irc2.11.2p3
+
+######################################################################
+
+CLIENTS_CHANNEL_LEVEL config.h define CCL_ALL macro defined to:
+
+(CCL_CONN|CCL_CONNINFO|CCL_QUIT|CCL_QUITINFO|CCL_NICK)
+
+######################################################################
+
+changelog:
+
+ v1.00
+
+ 2020-01-18 -- mh
+
+  * initial version
+
+######################################################################

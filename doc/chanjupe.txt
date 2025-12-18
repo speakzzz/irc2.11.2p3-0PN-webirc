@@ -1,0 +1,48 @@
+######################################################################
+
+chanjupe - Channel jupe
+
+######################################################################
+
+ Channel jupe patch chanjupe-v3.diff (original by jv) untouched
+
+ CHANJUPE is disabled by default
+
+ channel jupe also adds CLIENTS_CHANNEL_LEVELs CCL_CHANJUPE and the
+ slightly unrelated CCL_STATS
+
+######################################################################
+
+changelog:
+
+ v3
+
+ 2020-01-18 -- mh
+
+  * added chanjupe-v3.diff (original by jv) untouched
+
+######################################################################
+######################################################################
+
+chanjupe - Channel jupe
+
+######################################################################
+
+ Channel jupe patch chanjupe-v3.diff (original by jv) untouched
+
+ CHANJUPE is disabled by default
+
+ channel jupe also adds CLIENTS_CHANNEL_LEVELs CCL_CHANJUPE and the
+ slightly unrelated CCL_STATS
+
+######################################################################
+
+changelog:
+
+ v3
+
+ 2020-01-18 -- mh
+
+  * added chanjupe-v3.diff (original by jv) untouched
+
+######################################################################

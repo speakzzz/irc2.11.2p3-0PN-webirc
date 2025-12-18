@@ -1,0 +1,44 @@
+######################################################################
+
+versionlen - easy access config.h VERSIONLEN define for irc2.11.2p3
+
+######################################################################
+
+define VERSIONLEN in config.h to override the default ircd version
+string length limit.
+
+VERSIONLEN defaults to 32
+
+######################################################################
+
+changelog:
+
+ v1.00
+
+ 2020-01-17 -- mh
+
+  * initial version
+
+######################################################################
+######################################################################
+
+versionlen - easy access config.h VERSIONLEN define for irc2.11.2p3
+
+######################################################################
+
+define VERSIONLEN in config.h to override the default ircd version
+string length limit.
+
+VERSIONLEN defaults to 32
+
+######################################################################
+
+changelog:
+
+ v1.00
+
+ 2020-01-17 -- mh
+
+  * initial version
+
+######################################################################

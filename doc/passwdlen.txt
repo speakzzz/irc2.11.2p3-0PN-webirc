@@ -1,0 +1,42 @@
+######################################################################
+
+passwdlen - easy config.h access PASSWDLEN define for irc2.11.2p3
+
+######################################################################
+
+define PASSWDLEN in config.h to override the default ircd PASSWDLEN
+
+PASSWDLEN defaults to 128
+
+######################################################################
+
+changelog:
+
+ v1.00
+
+ 2020-01-17 -- mh
+
+  * initial version based on passopts v1 (po+spoof)
+
+######################################################################
+######################################################################
+
+passwdlen - easy config.h access PASSWDLEN define for irc2.11.2p3
+
+######################################################################
+
+define PASSWDLEN in config.h to override the default ircd PASSWDLEN
+
+PASSWDLEN defaults to 128
+
+######################################################################
+
+changelog:
+
+ v1.00
+
+ 2020-01-17 -- mh
+
+  * initial version based on passopts v1 (po+spoof)
+
+######################################################################
