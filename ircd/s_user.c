@@ -34,13 +34,13 @@ static const volatile char rcsid[] = "@(#)$Id: s_user.c,v 1.280 2010/08/12 16:29
 #include "common_def.h"
 #include "s_conf_ext.h" // For conf and CFLAG definitions
 
-/* * m_webirc - added for WEBIRC support
- * Parv: 0=WEBIRC, 1=password, 2=gateway, 3=hostname, 4=ip
+/* * m_webirc - FIXED for IPv6/INET6 support
+ * Stops DNS/Ident checks to prevent overwriting the spoofed IP.
+ * Handles IPv4 mapping for IPv6 compiled servers.
  */
 int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
 {
     aConfItem *aconf;
-    struct in_addr newip;
     int authorized = 0;
 
     /* Security: Only allow if not yet registered */
@@ -58,7 +58,6 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
         if (aconf->host && strchr(aconf->host, '/')) {
             if (match_ipmask(aconf->host, cptr, 0)) continue;
         } else {
-            /* Simple match on hostname/IP string */
             if (match(aconf->host, cptr->sockhost)) continue;
         }
 
@@ -70,29 +69,51 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     }
 
     if (!authorized) {
-        /* Optional: Send error or just silently fail */
+        /* Send error 464 (Password Incorrect) and exit */
         sendto_one(sptr, ":%s 464 %s :Password incorrect", me.name, sptr->name);
         return -1;
     }
 
-    /* Apply the spoofed details */
+    /* --- Stop DNS and Ident Checks --- */
+    if (DoingDNS(cptr)) {
+        ClearDNS(cptr);
+    }
+    if (DoingAuth(cptr)) {
+        ClearAuth(cptr);
+    }
+    
+    /* --- Apply the spoofed details --- */
     
     /* 1. Update Hostname */
     strncpyzt(cptr->sockhost, parv[3], HOSTLEN+1);
 
     /* 2. Update IP */
 #ifdef INET6
-    /* If you have IPv6 support enabled */
-    inet_pton(AF_INET6, parv[4], &cptr->ip.s6_addr);
+    /* Server is compiled with IPv6 support.
+     * We must check if the provided IP is IPv6 or IPv4.
+     */
+    if (strchr(parv[4], ':')) 
+    {
+        /* It is already an IPv6 address */
+        inet_pton(AF_INET6, parv[4], &cptr->ip);
+    }
+    else
+    {
+        /* It is an IPv4 address. We must map it to IPv6 (::ffff:x.x.x.x)
+         * because cptr->ip is a struct in6_addr and cannot hold a raw v4 int.
+         */
+        char ip6buf[64];
+        snprintf(ip6buf, sizeof(ip6buf), "::ffff:%s", parv[4]);
+        inet_pton(AF_INET6, ip6buf, &cptr->ip);
+    }
 #else
+    /* Standard IPv4-only server */
     cptr->ip.s_addr = inet_addr(parv[4]);
 #endif
 
-    /* 3. Mark as spoofed/webirc if you wish (Optional) */
-    /* SetSpoofed(cptr); */
-
     return 0;
 }
+
 static void	save_user (aClient *, aClient *, char *);
 
 static char buf[BUFSIZE], buf2[BUFSIZE];
