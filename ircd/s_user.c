@@ -34,18 +34,26 @@ static const volatile char rcsid[] = "@(#)$Id: s_user.c,v 1.280 2010/08/12 16:29
 #include "common_def.h"
 #include "s_conf_ext.h" // For conf and CFLAG definitions
 
-/* * m_webirc - FIXED for IPv6/INET6 support
- * Stops DNS/Ident checks to prevent overwriting the spoofed IP.
- * Handles IPv4 mapping for IPv6 compiled servers.
+/* * m_webirc - Robust Version
+ * Checks both Hostname and IP to prevent DNS race conditions.
  */
 int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
 {
     aConfItem *aconf;
     int authorized = 0;
+    char ipbuf[128];
 
     /* Security: Only allow if not yet registered */
     if (IsRegistered(sptr))
         return 0;
+
+    /* Get the raw IP address string for comparison */
+#ifdef INET6
+    inetntop(AF_INET6, (char *)&cptr->ip, ipbuf, sizeof(ipbuf));
+#else
+    /* Cast to char* to match existing code style in this version */
+    strcpy(ipbuf, (char *)inetntoa((char *)&cptr->ip)); 
+#endif
 
     /* Scan I-lines for the connecting host (The Gateway) */
     for (aconf = conf; aconf; aconf = aconf->next) {
@@ -56,9 +64,14 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
 
         /* Check if this config line matches the Current Gateway IP/Host */
         if (aconf->host && strchr(aconf->host, '/')) {
+            /* CIDR Match */
             if (match_ipmask(aconf->host, cptr, 0)) continue;
         } else {
-            if (match(aconf->host, cptr->sockhost)) continue;
+            /* String Match: Check Sockhost OR Raw IP 
+             * This ensures that if sockhost is resolved to a name, we still match the IP
+             */
+            if (match(aconf->host, cptr->sockhost) != 0 && match(aconf->host, ipbuf) != 0) 
+                continue;
         }
 
         /* Check Password */
