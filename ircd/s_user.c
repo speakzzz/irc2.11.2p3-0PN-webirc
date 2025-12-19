@@ -124,19 +124,26 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     /* Set the hostname to the IP string temporarily. */
     strncpyzt(cptr->sockhost, parv[4], HOSTLEN+1);
 
-    /* Trigger a NEW DNS lookup (Corrected Logic) */
+    /* Trigger a NEW DNS lookup (Memory Safe Version) */
     {
-        Link lin;
-        lin.flags = ASYNC_CLIENT;
-        lin.value.cptr = cptr;
-        lin.next = NULL;
+        /* Allocate persistent memory for the async link */
+        Link *lin = (Link *)RunMalloc(sizeof(Link));
+        
+        lin->flags = ASYNC_CLIENT;
+        lin->value.cptr = cptr;
+        lin->next = NULL;
         
         /* Initiate the lookup for the NEW IP address */
-        cptr->hostp = gethost_byaddr((char *)&cptr->ip, &lin);
+        cptr->hostp = gethost_byaddr((char *)&cptr->ip, lin);
         
-        /* If not returned immediately, mark as Waiting for DNS */
-        if (!cptr->hostp)
+        /* Check if lookup is pending (Async) or finished (Sync) */
+        if (!cptr->hostp) {
+            /* Still waiting for DNS -> Set flag */
             SetDNS(cptr);
+        } else {
+            /* Lookup finished immediately (Cached or failed) -> Free the link */
+            RunFree(lin);
+        }
     }
 
     return 0;
