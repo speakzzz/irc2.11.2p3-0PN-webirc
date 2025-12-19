@@ -30,5 +30,5 @@
 #define SPOOF_VERSION "1.05"
 #define WHOISEXTRA_VERSION "1.00"
 #define CCLALL_VERSION "1.00"
-#define VERSION_0PN "1.06"
+#define VERSION_0PN "1.06-webirc"
 #endif
