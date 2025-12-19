@@ -34,47 +34,41 @@ static const volatile char rcsid[] = "@(#)$Id: s_user.c,v 1.280 2010/08/12 16:29
 #include "common_def.h"
 #include "s_conf_ext.h" // For conf and CFLAG definitions
 
-/* * m_webirc - Robust Version for IRCNet
- * - Authenticates Gateway
- * - Spoofs IP
- * - Triggers NEW DNS lookup using gethost_byaddr
- * - Forces ident to 'webchat'
+/* * m_webirc - IPv4/IPv6 Robust Version
  */
 int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
 {
     aConfItem *aconf;
     int authorized = 0;
     char ipbuf[128];
+    Link *lin;
 
-    /* Security: Only allow if not yet registered */
-    if (IsRegistered(sptr))
-        return 0;
+    if (parc < 5) {
+        sendto_ops("WEBIRC Error: Need 5 params, got %d", parc);
+        return -1;
+    }
 
-    /* Get the raw IP address string of the gateway for comparison */
+    if (IsRegistered(sptr)) return 0;
+
+    /* Get the raw IP address string of the gateway */
 #ifdef INET6
     inetntop(AF_INET6, (char *)&cptr->ip, ipbuf, sizeof(ipbuf));
 #else
     strcpy(ipbuf, (char *)inetntoa((char *)&cptr->ip)); 
 #endif
 
-    /* Scan I-lines for the connecting host (The Gateway) */
+    /* Scan I-lines */
     for (aconf = conf; aconf; aconf = aconf->next) {
         if (aconf->status != CONF_CLIENT) continue;
-        
-        /* Must have the +W flag */
         if (!(aconf->flags & CFLAG_WEBIRC)) continue;
 
-        /* Check if this config line matches the Current Gateway IP/Host */
         if (aconf->host && strchr(aconf->host, '/')) {
-            /* CIDR Match */
             if (match_ipmask(aconf->host, cptr, 0)) continue;
         } else {
-            /* String Match: Check Sockhost OR Raw IP */
             if (match(aconf->host, cptr->sockhost) != 0 && match(aconf->host, ipbuf) != 0) 
                 continue;
         }
 
-        /* Check Password */
         if (aconf->passwd && strcmp(aconf->passwd, parv[1]) == 0) {
             authorized = 1;
             break;
@@ -82,68 +76,62 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     }
 
     if (!authorized) {
-        /* Send error 464 (Password Incorrect) and exit */
         sendto_one(sptr, ":%s 464 %s :Password incorrect", me.name, sptr->name);
         return -1;
     }
 
-    /* --- Stop previous DNS and Ident Checks --- */
-    if (DoingDNS(cptr)) {
-        ClearDNS(cptr);
-    }
-    if (DoingAuth(cptr)) {
-        ClearAuth(cptr);
-    }
-    
+    if (DoingDNS(cptr)) ClearDNS(cptr);
+    if (DoingAuth(cptr)) ClearAuth(cptr);
+
     /* --- Apply the spoofed details --- */
 
-    /* 1. Update IP Address FIRST */
 #ifdef INET6
-    if (strchr(parv[4], ':')) 
-    {
-        /* It is already an IPv6 address */
+    /* IPv6 Support Logic */
+    if (strchr(parv[4], ':')) {
+        /* Real IPv6 */
         inet_pton(AF_INET6, parv[4], &cptr->ip);
-    }
-    else
-    {
-        /* It is an IPv4 address. Map to IPv6 (::ffff:x.x.x.x) */
+    } else {
+        /* IPv4 Mapped as IPv6 (::ffff:x.x.x.x) */
         char ip6buf[64];
         snprintf(ip6buf, sizeof(ip6buf), "::ffff:%s", parv[4]);
         inet_pton(AF_INET6, ip6buf, &cptr->ip);
     }
 #else
-    /* Standard IPv4-only server */
+    /* Pure IPv4 Logic */
     cptr->ip.s_addr = inet_addr(parv[4]);
 #endif
 
-    /* 2. Force Ident to 'webchat' */
     strncpyzt(cptr->username, "webchat", USERLEN+1);
     cptr->flags |= FLAGS_GOTID;
 
-    /* 3. Handle Hostname & DNS */
-    /* Set the hostname to the IP string temporarily. */
+    /* Set sockhost to IP temporarily */
     strncpyzt(cptr->sockhost, parv[4], HOSTLEN+1);
 
-    /* Trigger a NEW DNS lookup (Memory Safe Version) */
-    {
-        /* Use MyMalloc (Standard IRCnet allocator) */
-        Link *lin = (Link *)MyMalloc(sizeof(Link));
-        
-        lin->flags = ASYNC_CLIENT;
-        lin->value.cptr = cptr;
-        lin->next = NULL;
-        
-        /* Initiate the lookup for the NEW IP address */
+    /* --- DNS LOOKUP FIX --- */
+    lin = (Link *)MyMalloc(sizeof(Link));
+    lin->flags = ASYNC_CLIENT;
+    lin->value.cptr = cptr;
+    lin->next = NULL;
+
+#ifdef INET6
+    /* If this is a Mapped IPv4 address (starts with ::ffff:), 
+       we must point to the last 4 bytes so the resolver sees it as IPv4 */
+    if (IN6_IS_ADDR_V4MAPPED(&cptr->ip)) {
+        /* Point to the IPv4 part inside the IPv6 struct */
+        cptr->hostp = gethost_byaddr((char *)&cptr->ip.s6_addr[12], lin);
+    } else {
+        /* Standard IPv6 lookup */
         cptr->hostp = gethost_byaddr((char *)&cptr->ip, lin);
-        
-        /* Check if lookup is pending (Async) or finished (Sync) */
-        if (!cptr->hostp) {
-            /* Still waiting for DNS -> Set flag */
-            SetDNS(cptr);
-        } else {
-            /* Lookup finished immediately (Cached or failed) -> Free the link */
-            MyFree(lin);
-        }
+    }
+#else
+    /* Standard IPv4 lookup */
+    cptr->hostp = gethost_byaddr((char *)&cptr->ip, lin);
+#endif
+    
+    if (!cptr->hostp) {
+        SetDNS(cptr);
+    } else {
+        MyFree(lin);
     }
 
     return 0;
