@@ -34,7 +34,10 @@ static const volatile char rcsid[] = "@(#)$Id: s_user.c,v 1.280 2010/08/12 16:29
 #include "common_def.h"
 #include "s_conf_ext.h" // For conf and CFLAG definitions
 
-/* * m_webirc - IPv4/IPv6 Robust Version
+/* * m_webirc - Final Working Version
+ * - IPv6/IPv4 Compatible
+ * - Uses MyMalloc for safe Async DNS
+ * - Removes broken debug calls
  */
 int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
 {
@@ -44,7 +47,8 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     Link *lin;
 
     if (parc < 5) {
-        sendto_ops("WEBIRC Error: Need 5 params, got %d", parc);
+        /* Send error to the Webchat Gateway only */
+        sendto_one(sptr, ":%s 461 %s WEBIRC :Not enough parameters", me.name, sptr->name);
         return -1;
     }
 
@@ -101,6 +105,7 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     cptr->ip.s_addr = inet_addr(parv[4]);
 #endif
 
+    /* Force Ident */
     strncpyzt(cptr->username, "webchat", USERLEN+1);
     cptr->flags |= FLAGS_GOTID;
 
@@ -108,29 +113,20 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     strncpyzt(cptr->sockhost, parv[4], HOSTLEN+1);
 
     /* --- DNS LOOKUP FIX --- */
+    /* We use MyMalloc to ensure the Link struct survives the function return.
+       This is critical for Async DNS to work. */
     lin = (Link *)MyMalloc(sizeof(Link));
     lin->flags = ASYNC_CLIENT;
     lin->value.cptr = cptr;
     lin->next = NULL;
 
-#ifdef INET6
-    /* If this is a Mapped IPv4 address (starts with ::ffff:), 
-       we must point to the last 4 bytes so the resolver sees it as IPv4 */
-    if (IN6_IS_ADDR_V4MAPPED(&cptr->ip)) {
-        /* Point to the IPv4 part inside the IPv6 struct */
-        cptr->hostp = gethost_byaddr((char *)&cptr->ip.s6_addr[12], lin);
-    } else {
-        /* Standard IPv6 lookup */
-        cptr->hostp = gethost_byaddr((char *)&cptr->ip, lin);
-    }
-#else
-    /* Standard IPv4 lookup */
+    /* Start the lookup using the standard pointer */
     cptr->hostp = gethost_byaddr((char *)&cptr->ip, lin);
-#endif
     
     if (!cptr->hostp) {
         SetDNS(cptr);
     } else {
+        /* If it finished immediately, we must free the link we just made */
         MyFree(lin);
     }
 
