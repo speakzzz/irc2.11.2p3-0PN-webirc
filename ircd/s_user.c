@@ -126,8 +126,8 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
 
     /* Trigger a NEW DNS lookup (Memory Safe Version) */
     {
-        /* Allocate persistent memory for the async link */
-        Link *lin = (Link *)RunMalloc(sizeof(Link));
+        /* Use MyMalloc (Standard IRCnet allocator) */
+        Link *lin = (Link *)MyMalloc(sizeof(Link));
         
         lin->flags = ASYNC_CLIENT;
         lin->value.cptr = cptr;
@@ -142,7 +142,7 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
             SetDNS(cptr);
         } else {
             /* Lookup finished immediately (Cached or failed) -> Free the link */
-            RunFree(lin);
+            MyFree(lin);
         }
     }
 
