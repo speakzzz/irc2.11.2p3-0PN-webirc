@@ -34,10 +34,9 @@ static const volatile char rcsid[] = "@(#)$Id: s_user.c,v 1.280 2010/08/12 16:29
 #include "common_def.h"
 #include "s_conf_ext.h" // For conf and CFLAG definitions
 
-/* * m_webirc - Final Working Version
- * - IPv6/IPv4 Compatible
- * - Uses MyMalloc for safe Async DNS
- * - Removes broken debug calls
+/* * m_webirc - Standard Resolver Version
+ * - Reverts to standard gethost_byaddr call
+ * - Maintains memory safety
  */
 int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
 {
@@ -47,7 +46,6 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     Link *lin;
 
     if (parc < 5) {
-        /* Send error to the Webchat Gateway only */
         sendto_one(sptr, ":%s 461 %s WEBIRC :Not enough parameters", me.name, sptr->name);
         return -1;
     }
@@ -109,24 +107,21 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
     strncpyzt(cptr->username, "webchat", USERLEN+1);
     cptr->flags |= FLAGS_GOTID;
 
-    /* Set sockhost to IP temporarily */
+    /* Set sockhost to IP temporarily (Fail-safe) */
     strncpyzt(cptr->sockhost, parv[4], HOSTLEN+1);
 
-    /* --- DNS LOOKUP FIX --- */
-    /* We use MyMalloc to ensure the Link struct survives the function return.
-       This is critical for Async DNS to work. */
+    /* --- DNS LOOKUP (STANDARD METHOD) --- */
     lin = (Link *)MyMalloc(sizeof(Link));
     lin->flags = ASYNC_CLIENT;
     lin->value.cptr = cptr;
     lin->next = NULL;
 
-    /* Start the lookup using the standard pointer */
+    /* Pass the FULL pointer. The resolver internally handles IPv4-mapped-in-IPv6 */
     cptr->hostp = gethost_byaddr((char *)&cptr->ip, lin);
     
     if (!cptr->hostp) {
         SetDNS(cptr);
     } else {
-        /* If it finished immediately, we must free the link we just made */
         MyFree(lin);
     }
 
