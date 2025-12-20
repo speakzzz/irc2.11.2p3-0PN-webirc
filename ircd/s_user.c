@@ -34,32 +34,36 @@ static const volatile char rcsid[] = "@(#)$Id: s_user.c,v 1.280 2010/08/12 16:29
 #include "common_def.h"
 #include "s_conf_ext.h" // For conf and CFLAG definitions
 
-/* * m_webirc - Standard Resolver Version
- * - Reverts to standard gethost_byaddr call
- * - Maintains memory safety
+/* * m_webirc - The "Ghostbuster" Fix
+ * - Destroys the 'cptr->hostp' pointer to prevent the server 
+ * from reverting to the Gateway's hostname.
+ * - Forces sockhost to the User's Hostname.
  */
+#include <netdb.h>
+#include <arpa/inet.h>
+
 int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
 {
     aConfItem *aconf;
     int authorized = 0;
     char ipbuf[128];
-    Link *lin;
+    struct hostent *hp = NULL;
+    struct in_addr ipv4_temp;
+#ifdef INET6
+    struct in6_addr ipv6_temp;
+#endif
 
     if (parc < 5) {
-        sendto_one(sptr, ":%s 461 %s WEBIRC :Not enough parameters", me.name, sptr->name);
         return -1;
     }
 
-    if (IsRegistered(sptr)) return 0;
-
-    /* Get the raw IP address string of the gateway */
+    /* 1. Authenticate the Gateway */
 #ifdef INET6
     inetntop(AF_INET6, (char *)&cptr->ip, ipbuf, sizeof(ipbuf));
 #else
     strcpy(ipbuf, (char *)inetntoa((char *)&cptr->ip)); 
 #endif
 
-    /* Scan I-lines */
     for (aconf = conf; aconf; aconf = aconf->next) {
         if (aconf->status != CONF_CLIENT) continue;
         if (!(aconf->flags & CFLAG_WEBIRC)) continue;
@@ -82,48 +86,60 @@ int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
         return -1;
     }
 
+    /* 2. BRUTE FORCE: Stop server DNS logic immediately */
     if (DoingDNS(cptr)) ClearDNS(cptr);
     if (DoingAuth(cptr)) ClearAuth(cptr);
 
-    /* --- Apply the spoofed details --- */
+    /* 3. KILL THE GHOST (CRITICAL FIX) 
+       The server has the Gateway's DNS cached in cptr->hostp.
+       We MUST disconnect this, or register_user() will revert our work. */
+    cptr->hostp = NULL; 
 
-#ifdef INET6
-    /* IPv6 Support Logic */
-    if (strchr(parv[4], ':')) {
-        /* Real IPv6 */
-        inet_pton(AF_INET6, parv[4], &cptr->ip);
-    } else {
-        /* IPv4 Mapped as IPv6 (::ffff:x.x.x.x) */
-        char ip6buf[64];
-        snprintf(ip6buf, sizeof(ip6buf), "::ffff:%s", parv[4]);
-        inet_pton(AF_INET6, ip6buf, &cptr->ip);
-    }
-#else
-    /* Pure IPv4 Logic */
-    cptr->ip.s_addr = inet_addr(parv[4]);
-#endif
-
-    /* Force Ident */
+    /* 4. Update Identity */
     strncpyzt(cptr->username, "webchat", USERLEN+1);
     cptr->flags |= FLAGS_GOTID;
 
-    /* Set sockhost to IP temporarily (Fail-safe) */
-    strncpyzt(cptr->sockhost, parv[4], HOSTLEN+1);
-
-    /* --- DNS LOOKUP (STANDARD METHOD) --- */
-    lin = (Link *)MyMalloc(sizeof(Link));
-    lin->flags = ASYNC_CLIENT;
-    lin->value.cptr = cptr;
-    lin->next = NULL;
-
-    /* Pass the FULL pointer. The resolver internally handles IPv4-mapped-in-IPv6 */
-    cptr->hostp = gethost_byaddr((char *)&cptr->ip, lin);
+    /* 5. Attempt Synchronous DNS Lookup for the USER */
+    int is_ipv4 = (strchr(parv[4], ':') == NULL);
     
-    if (!cptr->hostp) {
-        SetDNS(cptr);
-    } else {
-        MyFree(lin);
+    if (is_ipv4) {
+        if (inet_pton(AF_INET, parv[4], &ipv4_temp) > 0) {
+            hp = gethostbyaddr((char *)&ipv4_temp, sizeof(ipv4_temp), AF_INET);
+        }
+    } 
+#ifdef INET6
+    else {
+        if (inet_pton(AF_INET6, parv[4], &ipv6_temp) > 0) {
+            hp = gethostbyaddr((char *)&ipv6_temp, sizeof(ipv6_temp), AF_INET6);
+        }
     }
+#endif
+
+    /* 6. Update Hostname */
+    if (hp && hp->h_name && strlen(hp->h_name) > 0) {
+        /* Success: Found Real Hostname */
+        strncpyzt(cptr->sockhost, hp->h_name, HOSTLEN+1);
+    } else {
+        /* Fail: Use IP string (Still better than Gateway Host) */
+        strncpyzt(cptr->sockhost, parv[4], HOSTLEN+1);
+    }
+
+    /* 7. Update Internal IP State */
+#ifdef INET6
+    if (is_ipv4) {
+        char ip6buf[64];
+        snprintf(ip6buf, sizeof(ip6buf), "::ffff:%s", parv[4]);
+        inet_pton(AF_INET6, ip6buf, &cptr->ip);
+    } else {
+        inet_pton(AF_INET6, parv[4], &cptr->ip);
+    }
+#else
+    cptr->ip.s_addr = inet_addr(parv[4]);
+#endif
+
+    /* 8. Debug Notice */
+    sendto_one(sptr, ":%s NOTICE %s :WEBIRC SUCCESS. IP=%s HOST=%s", 
+               me.name, sptr->name, parv[4], cptr->sockhost);
 
     return 0;
 }
