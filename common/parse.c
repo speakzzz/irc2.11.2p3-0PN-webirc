@@ -31,11 +31,6 @@ static const volatile char rcsid[] = "@(#)$Id: parse.c,v 1.97 2010/08/12 16:29:3
 /* max parameters accepted */
 #define MPAR 15
 
-/* * Added for WEBIRC support
- * Ensure the prototype is known if not yet in s_externs.h
- */
-extern int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[]);
-
 #define _m(f) {f, 0, 0, 0L, 0L}
 /* commands should be sorted by their average usage count */
 /* handlers are for: server, client, oper, service, unregistered */

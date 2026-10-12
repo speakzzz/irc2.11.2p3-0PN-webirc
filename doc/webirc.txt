@@ -1,0 +1,68 @@
+WEBIRC support for irc2.11.2p3+0PN
+==================================
+
+A web chat gateway connects to the server on behalf of its users, so every
+user would otherwise appear to come from the gateway's address.  WEBIRC lets
+a trusted gateway tell the server the user's real IP address.
+
+Protocol
+--------
+
+The gateway sends, as the very first command of each connection (before
+NICK and USER; PASS may come before or after):
+
+	WEBIRC <password> <gateway name> <hostname> <ip>
+
+  <password>     must match the password of a W I-line (see below)
+  <gateway name> informational only
+  <hostname>     informational only, never trusted
+  <ip>           the user's IPv4 or IPv6 address
+
+An IPv6 address starting with ':' must be written with a leading zero
+(e.g. 0::1 instead of ::1), because IRC treats a parameter that starts
+with ':' as the final "trailing" parameter.
+
+Any error (unknown gateway, wrong password, invalid address, WEBIRC sent
+twice or after NICK/USER) closes the connection with an ERROR message and
+a SCH_LOCAL server notice.
+
+Configuration
+-------------
+
+Authorize the gateway with an I-line carrying the W flag.  The address
+field must hold the gateway's IP address or CIDR mask (a user@ prefix is
+accepted and ignored; hostnames are not used), and the password field the
+shared WEBIRC password:
+
+	I|*@192.0.2.10/32|LongRandomSecret|||10|W|
+
+A W I-line is only used to authorize WEBIRC.  It also remains an ordinary
+I-line for direct connections from the gateway, which therefore need the
+same password via PASS.
+
+What happens on success
+-----------------------
+
+  * The connection takes over <ip> as its address.  The server starts its
+    normal asynchronous reverse DNS lookup for <ip>; further commands from
+    the connection are held until the lookup finishes or times out.
+  * The resulting hostname is used only if it resolves forward to <ip>,
+    exactly as for direct connections; otherwise the IP is shown.
+  * The gateway's ident reply is discarded.  The user is treated as having
+    no ident, so the username gets the usual '~' prefix.
+  * At registration the user goes through I-lines, K-lines, class limits
+    and per-host limits as <ip>, like a direct connection.  The user's own
+    I-line (not the gateway's) decides the class.
+  * iauth keeps checking the gateway's socket only; its ident results are
+    ignored for WEBIRC connections.
+
+Operational notes
+-----------------
+
+  * Connection-rate throttling happens at accept time, before WEBIRC, so it
+    counts all web users against the gateway's address.  With CLONE_CHECK
+    (on by default) more than CLONE_MAX (10) connections per CLONE_PERIOD
+    (2 seconds) from the gateway are refused; raise these in config.h if
+    the gateway is busy.
+  * Keep the password long and random, and restrict the W I-line to the
+    gateway's exact address.

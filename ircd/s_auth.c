@@ -334,12 +334,16 @@ void	read_iauth(void)
 			    start = end;
 			    continue;
 			}
+		    /* iauth was told about the socket, which for WEBIRC
+		    ** clients is the gateway's address */
 #ifndef	INET6
 		    sprintf(tbuf, "%c %d %s %u ", start[0], i,
-			    inetntoa((char *)&cptr->ip), cptr->port);
+			    inetntoa((char *)(IsWebIRC(cptr) ? &cptr->gwip :
+			    &cptr->ip)), cptr->port);
 #else
 		    sprintf(tbuf, "%c %d %s %u ", start[0], i,
-			    inetntop(AF_INET6, (char *)&cptr->ip, 
+			    inetntop(AF_INET6, (char *)(IsWebIRC(cptr) ?
+			    &cptr->gwip : &cptr->ip),
 			    ipv6string, sizeof(ipv6string)), cptr->port);
 #endif
 		    if (strncmp(tbuf, start, strlen(tbuf)))
@@ -353,6 +357,13 @@ void	read_iauth(void)
 				    sendto_iauth("%d E Mismatch [%s] != [%s]",
 						 i, start, tbuf);
 				}
+			    start = end;
+			    continue;
+			}
+		    if ((start[0] == 'U' || start[0] == 'u') &&
+			IsWebIRC(cptr))
+			{
+			    /* ident of the gateway, not of the user */
 			    start = end;
 			    continue;
 			}

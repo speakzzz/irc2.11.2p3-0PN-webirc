@@ -868,6 +868,20 @@ static	int	check_init(aClient *cptr, char *sockn)
 	    }
 #endif
 
+	/* WEBIRC: cptr->ip already holds the address supplied by the
+	** gateway; getpeername() would return the gateway's. */
+	if (IsWebIRC(cptr))
+	    {
+#ifdef INET6
+		if (!inetntop(AF_INET6, (char *)&cptr->ip, sockn,
+			HOSTLEN+1))
+			strncpyzt(sockn, cptr->sockhost, HOSTLEN+1);
+#else
+		(void)strcpy(sockn, (char *)inetntoa((char *)&cptr->ip));
+#endif
+		return 0;
+	    }
+
 	/* If descriptor is a tty, special checking... */
 	if (isatty(cptr->fd))
 	    {
@@ -1990,6 +2004,8 @@ static	int	client_packet(aClient *cptr)
 	Reg	int	dolen = 0;
 
 	while (DBufLength(&cptr->recvQ) && !NoNewLine(cptr) &&
+	       /* WEBIRC: hold further lines until the lookup is done */
+	       !(cptr->status == STAT_UNKNOWN && DoingDNS(cptr)) &&
 	       ((cptr->status < STAT_UNKNOWN) ||
 		(cptr->since - timeofday < MAXPENALTY)))
 	    {
@@ -3464,7 +3480,12 @@ static	void	do_dns_async(void)
 				ClearDNS(cptr);
 				cptr->hostp = hp;
 #if defined(USE_IAUTH)
-				if (hp)
+				/* iauth only ever knows the gateway's socket
+				** for WEBIRC clients, don't feed it the
+				** user's hostname */
+				if (IsWebIRC(cptr))
+					;
+				else if (hp)
 				    {
 					int i = 0;
 

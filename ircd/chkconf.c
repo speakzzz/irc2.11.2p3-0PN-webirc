@@ -555,6 +555,7 @@ static	aConfItem 	*initconf(void)
 				case 'N':
 				case 'M':
 				case 'F':
+				case 'W':
 					break;
 				case ' ':
 				case '\t':

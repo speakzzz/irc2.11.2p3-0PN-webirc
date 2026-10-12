@@ -139,7 +139,7 @@ long	iline_flags_parse(char *string)
 	}
 	if (index(string, 'W'))
 	{
-    		tmp |= CFLAG_WEBIRC;
+		tmp |= CFLAG_WEBIRC;
 	}
 
 	return tmp;
@@ -187,7 +187,7 @@ char	*iline_flags_to_string(long flags)
 	}
 	if (flags & CFLAG_WEBIRC)
 	{
-    		*s++ = 'W';
+		*s++ = 'W';
 	}
 	if (s == ifsbuf)
 	{

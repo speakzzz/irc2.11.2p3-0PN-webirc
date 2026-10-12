@@ -32,116 +32,177 @@ static const volatile char rcsid[] = "@(#)$Id: s_user.c,v 1.280 2010/08/12 16:29
 #undef S_USER_C
 #include "struct_def.h"
 #include "common_def.h"
-#include "s_conf_ext.h" // For conf and CFLAG definitions
-
-/* * m_webirc - The "Ghostbuster" Fix
- * - Destroys the 'cptr->hostp' pointer to prevent the server 
- * from reverting to the Gateway's hostname.
- * - Forces sockhost to the User's Hostname.
- */
-#include <netdb.h>
 #include <arpa/inet.h>
 
-int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
+/*
+ * WEBIRC support (see doc/webirc.txt)
+ *
+ *	WEBIRC <password> <gateway> <hostname> <ip>
+ *
+ * Sent by a trusted web chat gateway as its first command, before NICK
+ * and USER.  The gateway is authorized by an I-line carrying the 'W' flag
+ * whose address field matches the gateway's socket address and whose
+ * password matches <password>.
+ *
+ * On success the client's address is replaced by <ip>, the gateway's
+ * hostname and ident are forgotten, and a normal asynchronous reverse
+ * lookup is started for <ip>.  The usual forward check in check_client()
+ * then decides whether the resulting hostname is accepted, and the client
+ * goes through I-line, K-line and class checks as <ip>, exactly like a
+ * direct connection.  <gateway> and <hostname> are informational only;
+ * the hostname a gateway claims is never trusted.
+ */
+
+/* compare without leaking the position of the first difference */
+static	int	webirc_passwd_ok(const char *conf, const char *given)
 {
-    aConfItem *aconf;
-    int authorized = 0;
-    char ipbuf[128];
-    struct hostent *hp = NULL;
-    struct in_addr ipv4_temp;
-#ifdef INET6
-    struct in6_addr ipv6_temp;
-#endif
+	size_t	lc = strlen(conf), lg = strlen(given), i;
+	unsigned char	diff = (lc != lg);
 
-    if (parc < 5) {
-        return -1;
-    }
+	if (lc == 0)
+		return 0;
+	for (i = 0; i < lg; i++)
+		diff |= (unsigned char)given[i] ^ (unsigned char)conf[i % lc];
+	return diff == 0;
+}
 
-    /* 1. Authenticate the Gateway */
+/* does the address field of a W I-line match the gateway's address? */
+static	int	webirc_gateway_match(char *mask, aClient *cptr, char *ipstr)
+{
+	char	*h;
+
+	if (BadPtr(mask))
+		return 0;
+	/* the user@ part is not meaningful here, only the address is */
+	h = index(mask, '@');
+	h = h ? h + 1 : mask;
+	if (!*h)
+		return 0;	/* refuse an empty (match-all) address */
+	if (index(h, '/'))
+		return match_ipmask(h, cptr, 0) == 0;
+	return match(h, ipstr) == 0;
+}
+
+static	int	webirc_reject(aClient *cptr, char *gwip, char *why)
+{
+	sendto_flag(SCH_LOCAL, "WEBIRC rejected from %s: %s", gwip, why);
+	cptr->exitc = EXITC_REF;
+	return exit_client(cptr, cptr, &me, why);
+}
+
+int	m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[])
+{
+	aConfItem	*aconf;
+	struct	IN_ADDR	newip;
+	char	gwipstr[HOSTLEN+1];
+	char	*ipstr;
+	Link	lin;
+
+	if (cptr != sptr || !MyConnect(sptr))
+		return 0;
+
 #ifdef INET6
-    inetntop(AF_INET6, (char *)&cptr->ip, ipbuf, sizeof(ipbuf));
+	inetntop(AF_INET6, (char *)&cptr->ip, gwipstr, sizeof(gwipstr));
 #else
-    strcpy(ipbuf, (char *)inetntoa((char *)&cptr->ip)); 
+	strncpyzt(gwipstr, (char *)inetntoa((char *)&cptr->ip),
+		sizeof(gwipstr));
 #endif
 
-    for (aconf = conf; aconf; aconf = aconf->next) {
-        if (aconf->status != CONF_CLIENT) continue;
-        if (!(aconf->flags & CFLAG_WEBIRC)) continue;
+	if (IsWebIRC(cptr))
+		return webirc_reject(cptr, gwipstr, "WEBIRC already received");
+	/* must come before NICK/USER, or they would use the gateway's data */
+	if (sptr->name[0] || sptr->user)
+		return webirc_reject(cptr, gwipstr,
+			"WEBIRC must be sent before NICK and USER");
+	if (parc < 5 || BadPtr(parv[1]) || BadPtr(parv[4]))
+		return webirc_reject(cptr, gwipstr, "WEBIRC: not enough parameters");
 
-        if (aconf->host && strchr(aconf->host, '/')) {
-            if (match_ipmask(aconf->host, cptr, 0)) continue;
-        } else {
-            if (match(aconf->host, cptr->sockhost) != 0 && match(aconf->host, ipbuf) != 0) 
-                continue;
-        }
+	/* 1. Authenticate the gateway: W I-line, address and password */
+	for (aconf = conf; aconf; aconf = aconf->next)
+	{
+		if (aconf->status != CONF_CLIENT ||
+		    !(aconf->flags & CFLAG_WEBIRC))
+			continue;
+		if (aconf->port && cptr->acpt && aconf->port != cptr->acpt->port)
+			continue;
+		if (!webirc_gateway_match(aconf->host, cptr, gwipstr))
+			continue;
+		if (!BadPtr(aconf->passwd) &&
+		    webirc_passwd_ok(aconf->passwd, parv[1]))
+			break;
+	}
+	if (!aconf)
+		return webirc_reject(cptr, gwipstr, "WEBIRC: unauthorized gateway");
 
-        if (aconf->passwd && strcmp(aconf->passwd, parv[1]) == 0) {
-            authorized = 1;
-            break;
-        }
-    }
-
-    if (!authorized) {
-        sendto_one(sptr, ":%s 464 %s :Password incorrect", me.name, sptr->name);
-        return -1;
-    }
-
-    /* 2. BRUTE FORCE: Stop server DNS logic immediately */
-    if (DoingDNS(cptr)) ClearDNS(cptr);
-    if (DoingAuth(cptr)) ClearAuth(cptr);
-
-    /* 3. KILL THE GHOST (CRITICAL FIX) 
-       The server has the Gateway's DNS cached in cptr->hostp.
-       We MUST disconnect this, or register_user() will revert our work. */
-    cptr->hostp = NULL; 
-
-    /* 4. Update Identity */
-    strncpyzt(cptr->username, "webchat", USERLEN+1);
-    cptr->flags |= FLAGS_GOTID;
-
-    /* 5. Attempt Synchronous DNS Lookup for the USER */
-    int is_ipv4 = (strchr(parv[4], ':') == NULL);
-    
-    if (is_ipv4) {
-        if (inet_pton(AF_INET, parv[4], &ipv4_temp) > 0) {
-            hp = gethostbyaddr((char *)&ipv4_temp, sizeof(ipv4_temp), AF_INET);
-        }
-    } 
+	/* 2. Validate the address strictly */
+	ipstr = parv[4];
+	bzero((char *)&newip, sizeof(newip));
 #ifdef INET6
-    else {
-        if (inet_pton(AF_INET6, parv[4], &ipv6_temp) > 0) {
-            hp = gethostbyaddr((char *)&ipv6_temp, sizeof(ipv6_temp), AF_INET6);
-        }
-    }
-#endif
+	if (inet_pton(AF_INET6, ipstr, &newip) != 1)
+	{
+		struct	in_addr	v4;
 
-    /* 6. Update Hostname */
-    if (hp && hp->h_name && strlen(hp->h_name) > 0) {
-        /* Success: Found Real Hostname */
-        strncpyzt(cptr->sockhost, hp->h_name, HOSTLEN+1);
-    } else {
-        /* Fail: Use IP string (Still better than Gateway Host) */
-        strncpyzt(cptr->sockhost, parv[4], HOSTLEN+1);
-    }
-
-    /* 7. Update Internal IP State */
-#ifdef INET6
-    if (is_ipv4) {
-        char ip6buf[64];
-        snprintf(ip6buf, sizeof(ip6buf), "::ffff:%s", parv[4]);
-        inet_pton(AF_INET6, ip6buf, &cptr->ip);
-    } else {
-        inet_pton(AF_INET6, parv[4], &cptr->ip);
-    }
+		if (inet_pton(AF_INET, ipstr, &v4) != 1)
+			return webirc_reject(cptr, gwipstr,
+				"WEBIRC: invalid IP address");
+		/* store IPv4 as ::ffff:a.b.c.d like accept() does */
+		newip.s6_addr[10] = 0xff;
+		newip.s6_addr[11] = 0xff;
+		bcopy((char *)&v4, (char *)&newip.s6_addr[12], 4);
+	}
 #else
-    cptr->ip.s_addr = inet_addr(parv[4]);
+	if (inet_pton(AF_INET, ipstr, &newip) != 1)
+		return webirc_reject(cptr, gwipstr, index(ipstr, ':') ?
+			"WEBIRC: IPv6 address but server built without INET6" :
+			"WEBIRC: invalid IP address");
 #endif
 
-    /* 8. Debug Notice */
-    sendto_one(sptr, ":%s NOTICE %s :WEBIRC SUCCESS. IP=%s HOST=%s", 
-               me.name, sptr->name, parv[4], cptr->sockhost);
+	/* 3. Switch identity.  check_init() keeps cptr->ip for WEBIRC
+	**    clients instead of reloading it with getpeername(). */
+	cptr->gwip = cptr->ip;
+	cptr->ip = newip;
+	SetWebIRC(cptr);
 
-    return 0;
+	/* forget the gateway's hostname ... */
+	del_queries((char *)cptr);
+	ClearDNS(cptr);
+	cptr->hostp = NULL;
+#ifdef INET6
+	if (!inetntop(AF_INET6, (char *)&cptr->ip, cptr->sockhost,
+		sizeof(cptr->sockhost)))
+		strncpyzt(cptr->sockhost, ipstr, sizeof(cptr->sockhost));
+#else
+	strncpyzt(cptr->sockhost, (char *)inetntoa((char *)&cptr->ip),
+		sizeof(cptr->sockhost));
+#endif
+
+	/* ... and its ident: the user is treated as having no ident */
+	if (cptr->auth != cptr->username)
+	{
+		istat.is_authmem -= strlen(cptr->auth) + 1;
+		istat.is_auth -= 1;
+		MyFree(cptr->auth);
+		cptr->auth = cptr->username;
+	}
+	strncpyzt(cptr->username, "unknown", USERLEN+1);
+	cptr->flags &= ~FLAGS_GOTID;
+
+	Debug((DEBUG_DNS, "WEBIRC: gateway %s (%s) -> %s", gwipstr,
+		parv[2] ? parv[2] : "", cptr->sockhost));
+
+	/* 4. Asynchronous reverse lookup for the real address.  Parsing of
+	**    this client's queue pauses (client_packet()) until it is done;
+	**    the forward check happens in check_client(). */
+	cptr->firsttime = timeofday;
+	lin.flags = ASYNC_CLIENT;
+	lin.value.cptr = cptr;
+	lin.next = NULL;
+	cptr->hostp = gethost_byaddr((char *)&cptr->ip, &lin);
+	if (!cptr->hostp)
+		SetDNS(cptr);
+	nextdnscheck = 1;
+
+	return 0;
 }
 
 static void	save_user (aClient *, aClient *, char *);

@@ -175,6 +175,7 @@ typedef enum Status {
 #define	FLAGS_WXAUTH	0x0004000 /* same as above, but also prevent parsing */
 #define	FLAGS_NONL	0x0008000 /* No \n in buffer */
 #define	FLAGS_CBURST	0x0010000 /* set to mark connection burst being sent */
+#define	FLAGS_WEBIRC	0x0020000 /* real address supplied by a WEBIRC gateway */
 #define	FLAGS_QUIT	0x0040000 /* QUIT :comment shows it's not a split */
 #define	FLAGS_SPLIT	0x0080000 /* client QUITting because of a netsplit */
 #define	FLAGS_HIDDEN	0x0100000 /* netsplit is behind a hostmask,
@@ -232,6 +233,8 @@ typedef enum Status {
 #ifdef UNIXPORT
 #define	IsUnixSocket(x)		((x)->flags & FLAGS_UNIX)
 #endif
+#define	IsWebIRC(x)		((x)->flags & FLAGS_WEBIRC)
+#define	SetWebIRC(x)		((x)->flags |= FLAGS_WEBIRC)
 #define	IsListener(x)		((x)->flags & FLAGS_LISTEN)
 #define IsListenerInactive(x)	((x)->flags & FLAGS_LISTENINACTIVE)
 #define	IsLocal(x)		(MyConnect(x) && (x)->flags & FLAGS_LOCAL)
@@ -412,8 +415,7 @@ struct	ListItem	{
 #ifdef SPOOF
 #define CFLAG_SPOOFED       0x00200
 #endif
-/* ADDED WEBIRC FLAG */
-#define CFLAG_WEBIRC        0x00400
+#define CFLAG_WEBIRC		0x00400	/* I-line authorizes a WEBIRC gateway */
 
 #define IsConfRestricted(x)	((x)->flags & CFLAG_RESTRICTED)
 #define IsConfRNoDNS(x)		((x)->flags & CFLAG_RNODNS)
@@ -600,6 +602,7 @@ struct Client	{
 	char	*auth;
 	u_short	port;		/* and the remote port# too :-) */
 	struct	IN_ADDR	ip;	/* keep real ip# too */
+	struct	IN_ADDR	gwip;	/* WEBIRC: socket address of the gateway */
 	struct	hostent	*hostp;
 	char	sockhost[HOSTLEN+1]; /* This is the host name from the socket
 				  ** and after which the connection was
