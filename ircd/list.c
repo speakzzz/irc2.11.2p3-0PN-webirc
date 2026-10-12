@@ -164,6 +164,9 @@ void	free_client(aClient *cptr)
 		{
 			MyFree(cptr->reason);
 		}
+#ifdef USE_SSL
+		tls_free(cptr);
+#endif
 #ifdef XLINE
 		if (cptr->user2)
 			MyFree(cptr->user2);

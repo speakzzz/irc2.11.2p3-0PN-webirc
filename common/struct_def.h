@@ -190,6 +190,8 @@ typedef enum Status {
 				  ** a SQUIT. */
 #define	FLAGS_EOB	0x4000000 /* EOB received */
 #define FLAGS_LISTENINACTIVE 0x8000000 /* Listener does not listen() */
+#define	FLAGS_TLSHS	0x20000000 /* TLS handshake in progress */
+#define	FLAGS_TLSWANTW	0x40000000 /* TLS layer waits for writability */
 #ifdef JAPANESE
 #define	FLAGS_JP	0x10000000 /* jp version, used both for chans and servs */
 #endif
@@ -436,11 +438,17 @@ struct	ListItem	{
 #ifdef WHOISTLS
 #define PFLAG_TLS           0x00004
 #endif
+#ifdef USE_SSL
+#define PFLAG_SSL		0x00008	/* native TLS port ('E' flag) */
+#endif
 
 #define IsConfDelayed(x)	((x)->flags & PFLAG_DELAYED)
 #define IsConfServeronly(x)	((x)->flags & PFLAG_SERVERONLY)
 #ifdef WHOISTLS
 #define IsConfTLS(x)        ((x)->flags & PFLAG_TLS)
+#endif
+#ifdef USE_SSL
+#define IsConfSSL(x)		((x)->flags & PFLAG_SSL)
 #endif
 
 #define	IsIllegal(x)	((x)->status & CONF_ILLEGAL)
@@ -617,6 +625,10 @@ struct Client	{
 	** non-users than two pointers for all remote users. --B. */
 	char	*user2;	/* 2nd param of USER */
 	char	*user3;	/* 3rd param of USER */
+#endif
+#ifdef USE_SSL
+	struct	ssl_st	*ssl;	/* TLS session, NULL for plain connections */
+	char	*certfp;	/* SHA-256 of the client certificate (hex) */
 #endif
 
 };

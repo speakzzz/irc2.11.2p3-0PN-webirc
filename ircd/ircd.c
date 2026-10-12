@@ -1071,7 +1071,11 @@ int	main(int argc, char *argv[])
 		
 		exit(-1);
 	    }
-	else
+#ifdef USE_SSL
+	/* certificate for E-flagged P-lines, fatal if it cannot be loaded */
+	if (tls_init(1) == -1)
+		exit(-1);
+#endif
 	    {
 		aClient *acptr = NULL;
 		int i;

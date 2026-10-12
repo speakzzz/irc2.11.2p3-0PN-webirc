@@ -304,7 +304,7 @@ char *	replies[] = {
 /* 273 */ (char *)NULL,
 /* 274 */ (char *)NULL,
 /* 275 */ (char *)NULL,
-/* 276 */ (char *)NULL,
+/* 276 RPL_WHOISCERTFP */ ":%s 276 %s %s :has client certificate fingerprint %s",
 /* 277 */ (char *)NULL,
 /* 278 */ (char *)NULL,
 /* 279 */ (char *)NULL,

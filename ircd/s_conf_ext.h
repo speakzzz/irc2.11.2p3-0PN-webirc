@@ -95,5 +95,6 @@ EXTERN int m_kline(aClient *, aClient *, int, char **);
 #endif
 #ifdef CHANJUPE
 EXTERN int m_resv(aClient *, aClient *, int, char **);
+EXTERN aConfItem *find_chanjupe (char *name, int status);
 #endif
 #undef EXTERN

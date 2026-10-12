@@ -45,6 +45,9 @@ LIBS = @LIBS@
 MATHLIBS = @MATHLIBS@
 # zlib, eventually
 ZLIBS = @IRC_ZLIB_LIBRARY@
+
+# OpenSSL, for native TLS (USE_SSL in config.h); empty it if USE_SSL is off
+SSLLIBS = -lssl -lcrypto
 # for DSM support (dlopen(), dlsym(), dlclose())
 DLIBS = @IRC_DLIB@
 # install and related programs
@@ -103,6 +106,9 @@ KLINE_PATH = $(ircd_conf_dir)/$(IRCD).kline
 JUPE_FILE = $(ircd_conf_dir)/$(IRCD).jupe
 # server Message Of The Day
 IRCDMOTD_PATH = $(ircd_conf_dir)/$(IRCD).motd
+# TLS certificate (full chain, PEM) and private key, see doc/tls.txt
+TLS_CERT_PATH = $(ircd_conf_dir)/$(IRCD).crt
+TLS_KEY_PATH = $(ircd_conf_dir)/$(IRCD).key
 # authentication slave configuration file
 IAUTHCONF_PATH = $(ircd_conf_dir)/$(IAUTH).conf
 # server PID file
@@ -161,7 +167,7 @@ IRCD_COMMON_OBJS = bsd.o dbuf.o packet.o send.o match.o parse.o \
 IRCD_OBJS = channel.o class.o hash.o ircd.o list.o res.o s_auth.o \
               s_bsd.o s_conf.o s_debug.o s_err.o s_id.o s_misc.o s_numeric.o \
               s_send.o s_serv.o s_service.o s_user.o s_zip.o whowas.o \
-              res_init.o res_comp.o res_mkquery.o patricia.o
+              res_init.o res_comp.o res_mkquery.o patricia.o s_tls.o
 
 IAUTH_COMMON_OBJS = clsupport.o clmatch.o # This is a little evil
 IAUTH_OBJS = iauth.o a_conf.o a_io.o a_log.o \
@@ -194,7 +200,7 @@ $(IRCD_BIN): $(IRCD_COMMON_OBJS) $(IRCD_OBJS)
 	$(RM) $@
 	./version.c.SH
 	$(CC) $(S_CFLAGS) -c -o version.o version.c
-	$(CC) $(LDFLAGS) -o $@ $(IRCD_COMMON_OBJS) version.o $(IRCD_OBJS) $(ZLIBS) $(MATHLIBS) $(LIBS)
+	$(CC) $(LDFLAGS) -o $@ $(IRCD_COMMON_OBJS) version.o $(IRCD_OBJS) $(ZLIBS) $(MATHLIBS) $(SSLLIBS) $(LIBS)
 
 $(IAUTH): $(IAUTH_COMMON_OBJS) $(IAUTH_OBJS)
 	$(RM) $@
@@ -384,6 +390,10 @@ s_service.o: ../ircd/s_service.c setup.h config.h ../common/struct_def.h
 
 s_user.o: ../ircd/s_user.c setup.h config.h ../common/struct_def.h
 	$(CC) $(S_CFLAGS) -DFNAME_USERLOG="\"$(FNAME_USERLOG)\"" -DFNAME_CONNLOG="\"$(FNAME_CONNLOG)\"" -DFNAME_OPERLOG="\"$(FNAME_OPERLOG)\"" -c -o $@ ../ircd/s_user.c
+
+s_tls.o: ../ircd/s_tls.c setup.h config.h ../common/struct_def.h
+	$(CC) $(S_CFLAGS) -DTLS_CERT_FILE="\"$(TLS_CERT_PATH)\"" \
+	-DTLS_KEY_FILE="\"$(TLS_KEY_PATH)\"" -c -o $@ ../ircd/s_tls.c
 
 s_zip.o: ../ircd/s_zip.c setup.h config.h ../common/struct_def.h
 	$(CC) $(S_CFLAGS) -c -o $@ ../ircd/s_zip.c

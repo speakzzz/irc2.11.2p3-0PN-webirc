@@ -226,6 +226,13 @@ long pline_flags_parse(char *string)
 		tmp |= PFLAG_TLS;
 	}
 #endif
+#ifdef USE_SSL
+	/* E - native TLS port (also labels clients as secure) */
+	if (index(string, 'E'))
+	{
+		tmp |= PFLAG_SSL;
+	}
+#endif
 	return tmp;
 }
 /* Convert P-line flags from integer to string
@@ -249,6 +256,12 @@ char *pline_flags_to_string(long flags)
 	if (flags & PFLAG_TLS)
 	{
 		*s++ = 'T';
+	}
+#endif
+#ifdef USE_SSL
+	if (flags & PFLAG_SSL)
+	{
+		*s++ = 'E';
 	}
 #endif
 	
@@ -516,6 +529,20 @@ badmask:
 
 #define UHConfMatch(x, y, z)	(match((x), (index((x), '@') ? (y) : (y)+(z))))
 
+/*
+ * I-line password check; "certfp=<sha256>[,<password>]" requires the
+ * client certificate (and the password, if given).
+ */
+static	int	iline_passwd_ok(aClient *cptr, char *confpass)
+{
+	char	*rest;
+	int	ok;
+
+	if (conf_certfp(cptr, confpass, &rest, &ok))
+		return ok && (!rest || StrEq(cptr->passwd, rest));
+	return StrEq(cptr->passwd, confpass);
+}
+
 int	attach_Iline(aClient *cptr, struct hostent *hp, char *sockhost)
 {
 	Reg	aConfItem	*aconf;
@@ -631,7 +658,7 @@ int	attach_Iline(aClient *cptr, struct hostent *hp, char *sockhost)
 		/* Password check, if I:line has it. If 'F' flag, try another
 		** I:line, otherwise bail out and reject client. */
 		if (!BadPtr(aconf->passwd) &&
-			!StrEq(cptr->passwd, aconf->passwd))
+			!iline_passwd_ok(cptr, aconf->passwd))
 		{
 			if (IsConfFallThrough(aconf))
 			{
@@ -1484,6 +1511,9 @@ int	rehash(aClient *cptr, aClient *sptr, int sig)
 	(void) initconf(0);
 	close_listeners();
 	reopen_listeners();
+#ifdef USE_SSL
+	(void) tls_init(0);
+#endif
 
 	/*
 	 * Flush *unused* config entries.

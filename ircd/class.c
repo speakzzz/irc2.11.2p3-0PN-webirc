@@ -176,6 +176,7 @@ void	add_class(int class, int ping, int confreq, int maxli, int sendq,
 		MaxSendq(p) = QUEUELEN;
 #ifdef ENABLE_CIDR_LIMITS
 		CidrLen(p) = 0;
+		MaxCidrAmount(p) = 0;
 		p->ip_limits = NULL;
 #endif
 		istat.is_class++;

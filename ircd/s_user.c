@@ -985,6 +985,15 @@ int	register_user(aClient *cptr, aClient *sptr, char *nick, char *username)
 			sendto_one(sptr, ":%s NOTICE %s :%s", ME, nick, WHOISTLS_NOTICE);
 		}
 #endif
+#ifdef USE_SSL
+		if (sptr->ssl && tls_cipher(sptr))
+			sendto_one(sptr, ":%s NOTICE %s :*** You are connected "
+				"using %s", ME, nick, tls_cipher(sptr));
+		if (sptr->certfp)
+			sendto_one(sptr, ":%s NOTICE %s :*** Your client "
+				"certificate fingerprint is %s",
+				ME, nick, sptr->certfp);
+#endif
 #ifdef SPOOF_NOTICE
 		/* send a notice to client if the connection is spoofed.
 		 * notice is defined as SPOOF_NOTICE in config.h -- mh 20191230 */
@@ -2299,6 +2308,14 @@ static	void	send_whois(aClient *sptr, aClient *acptr)
 		sendto_one(sptr, replies[RPL_WHOISTLS], ME, BadTo(sptr->name), name, WHOISTLS);
 	}
 #endif
+#ifdef USE_SSL
+	/* fingerprints are only known for local clients; shown to the
+	** client itself and to operators */
+	if (MyConnect(acptr) && acptr->certfp &&
+	    (sptr == acptr || IsAnOper(sptr)))
+		sendto_one(sptr, replies[RPL_WHOISCERTFP], ME,
+			BadTo(sptr->name), name, acptr->certfp);
+#endif
 
 	if (acptr->user && MyConnect(acptr))
 		sendto_one(sptr, replies[RPL_WHOISIDLE], ME, BadTo(sptr->name),
@@ -2502,7 +2519,11 @@ int	m_user(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	me.serv->refcnt++;
 
 #ifdef WHOISTLS
-	if (IsConfTLS(cptr->acpt->confs->value.aconf))
+	if (IsConfTLS(cptr->acpt->confs->value.aconf)
+#ifdef USE_SSL
+	    || cptr->ssl
+#endif
+	   )
 	{
 		SetTLS(sptr);
 	}
@@ -3020,6 +3041,8 @@ int	m_oper(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	aConfItem *aconf;
 	char	*name, *password, *encr;
 	char	*logstring = NULL;
+	char	*confpass;	/* password part of the O-line */
+	int	certok = 1, pwok;
 
 	name = parv[1];
 	password = parv[2];
@@ -3040,14 +3063,18 @@ int	m_oper(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		sendto_one(sptr, ":%s %d %s :Too many opers", ME, ERR_NOOPERHOST, BadTo(parv[0]));
 		return 1;
 	}
+	/* "certfp=<sha256>[,<password>]": client certificate required */
+	confpass = aconf->passwd;
+	if (!conf_certfp(sptr, aconf->passwd, &confpass, &certok))
+		confpass = aconf->passwd;
 #ifdef CRYPT_OPER_PASSWORD
 	/* pass whole aconf->passwd as salt, let crypt() deal with it */
 
-	if (password && aconf->passwd)
+	if (password && confpass)
 	    {
 		extern	char *crypt();
 
-		encr = crypt(password, aconf->passwd);
+		encr = crypt(password, confpass);
 		if (encr == NULL)
 		    {
 			sendto_flag(SCH_ERROR, "crypt() returned NULL");
@@ -3061,8 +3088,10 @@ int	m_oper(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	encr = password;
 #endif  /* CRYPT_OPER_PASSWORD */
 
+	/* certfp-only O-line: any password is accepted */
+	pwok = certok && (!confpass || (encr && StrEq(encr, confpass)));
 	if ((aconf->status & CONF_OPS) &&
-	    StrEq(encr, aconf->passwd) && !attach_conf(sptr, aconf))
+	    pwok && !attach_conf(sptr, aconf))
 	{
 		int old = (sptr->user->flags & ALL_UMODES);
 		char *s;
@@ -3099,7 +3128,7 @@ int	m_oper(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	else /* Wrong password or attach_conf() failed */
 	{
 		(void)detach_conf(sptr, aconf);
-		if (!StrEq(encr, aconf->passwd))
+		if (!pwok)
 			sendto_one(sptr,replies[ERR_PASSWDMISMATCH], ME, BadTo(parv[0]));
 		else
 			sendto_one(sptr,":%s %d %s :Too many connections",

@@ -1375,6 +1375,9 @@ void close_client_fd(aClient *cptr)
 		 }
 		del_fd(i, &fdall);
 		local[i] = NULL;
+#ifdef USE_SSL
+		tls_close(cptr);
+#endif
 		(void)close(i);
 
 		cptr->fd = -1;
@@ -1816,6 +1819,13 @@ aClient	*add_connection(aClient *cptr, int fd)
 		add_connection_refuse(fd, acptr, 0);
 		return NULL;
 	}
+#ifdef USE_SSL
+	if (aconf && IsConfSSL(aconf) && tls_accept(acptr, fd) < 0)
+	{
+		add_connection_refuse(fd, acptr, 0);
+		return NULL;
+	}
+#endif
 	if (aconf)
 		aconf->clients++;
 	if (fd > highest_fd)
@@ -2075,6 +2085,20 @@ static	int	read_packet(aClient *cptr, int msg_ready)
 	    !(IsPerson(cptr) && DBufLength(&cptr->recvQ) > 6090))
 	    {
 		errno = 0;
+#ifdef USE_SSL
+		if (cptr->ssl)
+		{
+			length = tls_read(cptr, readbuf, sizeof(readbuf));
+			if (length == -2)
+			{
+				char	tbuf[300];
+
+				sprintf(tbuf, "TLS error: %.280s", tls_error());
+				return exit_client(cptr, cptr, &me, tbuf);
+			}
+		}
+		else
+#endif
 #ifdef INET6
 		length = recvfrom(cptr->fd, readbuf, sizeof(readbuf), 0, 0, 0);
 #else
@@ -2131,6 +2155,29 @@ static	int	read_packet(aClient *cptr, int msg_ready)
 		/* why no poolsize increase here like in send? --B. */
 		if (length && dbuf_put(&cptr->recvQ, readbuf, length) < 0)
 			return exit_client(cptr, cptr, &me, "dbuf_put fail");
+#ifdef USE_SSL
+		/*
+		** OpenSSL may hold already decrypted data that poll()/select()
+		** cannot see, so read until it reports it needs more input.
+		** The flood check below still applies to the total.
+		*/
+		while (cptr->ssl && length > 0 &&
+		       DBufLength(&cptr->recvQ) <= CLIENT_FLOOD)
+		{
+			length = tls_read(cptr, readbuf, sizeof(readbuf));
+			if (length == -2)
+			{
+				char	tbuf[300];
+
+				sprintf(tbuf, "TLS error: %.280s", tls_error());
+				return exit_client(cptr, cptr, &me, tbuf);
+			}
+			if (length > 0 &&
+			    dbuf_put(&cptr->recvQ, readbuf, length) < 0)
+				return exit_client(cptr, cptr, &me,
+					"dbuf_put fail");
+		}
+#endif
 
 		if (IsPerson(cptr) &&
 		    DBufLength(&cptr->recvQ) > CLIENT_FLOOD
@@ -2307,6 +2354,19 @@ int	read_message(time_t delay, FdAry *fdp, int ro)
 			** If we have anything in the sendQ, check if there is
 			** room to write data.
 			*/
+#ifdef USE_SSL
+			/* TLS: arm write events only when they can make
+			** progress, or a pending handshake would spin */
+			if (tls_want_write(cptr) == 1)
+			{
+				SET_WRITE_EVENT(fd);
+			}
+			else if (tls_want_write(cptr) == 0)
+			{
+				/* handshake waits for the client */
+			}
+			else
+#endif
 			if (DBufLength(&cptr->sendQ) || 
 #ifdef	ZIP_LINKS
 			    ((cptr->flags & FLAGS_ZIP) &&
@@ -2492,6 +2552,14 @@ int	read_message(time_t delay, FdAry *fdp, int ro)
 			*/
 			if (IsConnecting(cptr))
 				write_err = completed_connection(cptr);
+#ifdef USE_SSL
+			if (!write_err && tls_writable(cptr) < 0)
+			{
+				(void)exit_client(cptr, cptr, &me,
+					"TLS handshake failed");
+				continue;
+			}
+#endif
 			if (!write_err)
 				(void)send_queued(cptr);
 			if (IsDead(cptr) || write_err)

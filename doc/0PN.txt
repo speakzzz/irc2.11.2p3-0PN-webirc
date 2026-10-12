@@ -17,6 +17,7 @@ patches included:
  whoisextra v1.00 RPL_WHOISEXTRA numeric 320 (see doc/whoisextra.txt)
  whoistls   v1.00 SSL/TLS RPL_WHOISTLS reply (see doc/whoistls.txt)
  webirc     v2    WEBIRC gateway support, I-line flag W (see doc/webirc.txt)
+ tls        v1    native TLS on P-lines with flag E, CertFP (see doc/tls.txt)
 
 config.h changes (added by patches):
 

@@ -91,6 +91,22 @@ int	deliver_it(aClient *cptr, char *str, int len)
 #ifdef	DEBUGMODE
 	writecalls++;
 #endif
+#if defined(USE_SSL) && !defined(CLIENT_COMPILE)
+	if (cptr->ssl)
+	{
+		/* tls_write() already maps "try again" to 0 and failures
+		** to -errno, like the code below does for send() */
+		retval = tls_write(cptr, str, len);
+		if (retval > 0)
+		{
+			cptr->sendB += retval;
+			me.sendB += retval;
+			if (acpt != &me)
+				acpt->sendB += retval;
+		}
+		return retval;
+	}
+#endif
 	retval = send(cptr->fd, str, len, 0);
 
 	/* Prevent overwriting errno of send(). */

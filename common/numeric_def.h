@@ -236,6 +236,7 @@
 
 #define RPL_WHOISCHANOP      316 /* redundant and not needed but reserved */
 #define RPL_WHOISIDLE        317
+#define RPL_WHOISCERTFP      276 /* client certificate fingerprint (USE_SSL) */
 
 #define RPL_ENDOFWHOIS       318
 #define RPL_WHOISCHANNELS    319
