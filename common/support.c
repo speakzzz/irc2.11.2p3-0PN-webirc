@@ -835,6 +835,9 @@ char	**make_isupport(void)
 
 	tis[1] = (char *) MyMalloc(BUFSIZE);
 	sprintf(tis[1],	"PENALTY FNC EXCEPTS=e INVEX=I CASEMAPPING=ascii");
+#ifdef CALLERID
+	strcat(tis[1], " CALLERID=g");
+#endif
 	if (networkname)
 	{
 		strcat(tis[1], " NETWORK=");

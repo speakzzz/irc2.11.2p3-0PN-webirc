@@ -167,7 +167,8 @@ IRCD_COMMON_OBJS = bsd.o dbuf.o packet.o send.o match.o parse.o \
 IRCD_OBJS = channel.o class.o hash.o ircd.o list.o res.o s_auth.o \
               s_bsd.o s_conf.o s_debug.o s_err.o s_id.o s_misc.o s_numeric.o \
               s_send.o s_serv.o s_service.o s_user.o s_zip.o whowas.o \
-              res_init.o res_comp.o res_mkquery.o patricia.o s_tls.o
+              res_init.o res_comp.o res_mkquery.o patricia.o s_tls.o \
+              s_callerid.o
 
 IAUTH_COMMON_OBJS = clsupport.o clmatch.o # This is a little evil
 IAUTH_OBJS = iauth.o a_conf.o a_io.o a_log.o \
@@ -390,6 +391,9 @@ s_service.o: ../ircd/s_service.c setup.h config.h ../common/struct_def.h
 
 s_user.o: ../ircd/s_user.c setup.h config.h ../common/struct_def.h
 	$(CC) $(S_CFLAGS) -DFNAME_USERLOG="\"$(FNAME_USERLOG)\"" -DFNAME_CONNLOG="\"$(FNAME_CONNLOG)\"" -DFNAME_OPERLOG="\"$(FNAME_OPERLOG)\"" -c -o $@ ../ircd/s_user.c
+
+s_callerid.o: ../ircd/s_callerid.c setup.h config.h ../common/struct_def.h
+	$(CC) $(S_CFLAGS) -c -o $@ ../ircd/s_callerid.c
 
 s_tls.o: ../ircd/s_tls.c setup.h config.h ../common/struct_def.h
 	$(CC) $(S_CFLAGS) -DTLS_CERT_FILE="\"$(TLS_CERT_PATH)\"" \

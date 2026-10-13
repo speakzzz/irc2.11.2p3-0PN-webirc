@@ -52,6 +52,9 @@ struct Message msgtab[] = {
 { "INVITE",   2, MPAR, { _m(m_nop), _m(m_invite), _m(m_invite), _m(m_nop), _m(m_unreg) } },
 { "WALLOPS",  1, MPAR, { _m(m_wallops), _m(m_nop), _m(m_nop), _m(m_nop), _m(m_unreg) } },
 { "WEBIRC",   4, MPAR, { _m(m_nop), _m(m_nop), _m(m_nop), _m(m_nop), _m(m_webirc) } },
+#ifdef CALLERID
+{ "ACCEPT",   0, MPAR, { _m(m_nop), _m(m_accept), _m(m_accept), _m(m_nop), _m(m_unreg) } },
+#endif
 { "PING",     1, MPAR, { _m(m_ping), _m(m_ping), _m(m_ping), _m(m_ping), _m(m_unreg) } },
 { "PONG",     1, MPAR, { _m(m_pong), _m(m_pong), _m(m_pong), _m(m_pong), _m(m_unreg) } },
 { "ERROR",    1, MPAR, { _m(m_error), _m(m_nop), _m(m_nop), _m(m_nop), _m(m_unreg) } },

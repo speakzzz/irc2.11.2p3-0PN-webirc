@@ -215,6 +215,10 @@ static int user_modes[]	     = { FLAGS_OPER, 'o',
 				 FLAGS_WALLOP, 'w',
 				 FLAGS_RESTRICT, 'r',
 				 FLAGS_AWAY, 'a',
+#ifdef CALLERID
+				 FLAGS_CALLERID, 'g',
+				 FLAGS_CALLERIDS, 'G',
+#endif
 				 0, 0 };
 
 /*
@@ -1719,6 +1723,14 @@ static	int	m_message(aClient *cptr, aClient *sptr, int parc,
 			&& (acptr = find_uid(nick, NULL))) || 
 			(acptr = find_person(nick, NULL)))
 		    {
+#ifdef CALLERID
+			/* +g/+G and the flood shield, for users on this
+			** server; checked before the away reply leaks */
+			if (!callerid_check(sptr, acptr, notice))
+				continue;
+			if (!notice)
+				callerid_sent(sptr, acptr);
+#endif
 			if (!notice && MyConnect(sptr) &&
 			    acptr->user && (acptr->user->flags & FLAGS_AWAY))
 				send_away(sptr, acptr);
@@ -1815,6 +1827,9 @@ static	int	m_message(aClient *cptr, aClient *sptr, int parc,
 			    !mycmp(user+1, acptr->user->username) &&
 			    !mycmp(host+1, acptr->user->host))
 			    {
+#ifdef CALLERID
+				if (callerid_check(sptr, acptr, notice))
+#endif
 				sendto_prefix_one(acptr, sptr, ":%s %s %s :%s",
 						  parv[0], cmd, nick, parv[2]);
 				*user = '!';
@@ -1857,7 +1872,11 @@ static	int	m_message(aClient *cptr, aClient *sptr, int parc,
 				*--host = '%';
 			if (acptr)
 			    {
-				if (count == 1)
+				if (count == 1
+#ifdef CALLERID
+				    && callerid_check(sptr, acptr, notice)
+#endif
+				    )
 					sendto_prefix_one(acptr, sptr,
 							  ":%s %s %s :%s",
 					 		  parv[0], cmd,
@@ -1879,7 +1898,11 @@ static	int	m_message(aClient *cptr, aClient *sptr, int parc,
 			*--host = '%';
 			if (acptr)
 			    {
-				if (count == 1)
+				if (count == 1
+#ifdef CALLERID
+				    && callerid_check(sptr, acptr, notice)
+#endif
+				    )
 					sendto_prefix_one(acptr, sptr,
 							  ":%s %s %s :%s",
 					 		  parv[0], cmd,
@@ -3093,7 +3116,7 @@ int	m_oper(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	if ((aconf->status & CONF_OPS) &&
 	    pwok && !attach_conf(sptr, aconf))
 	{
-		int old = (sptr->user->flags & ALL_UMODES);
+		int old = (sptr->user->flags & (ALL_UMODES|LOCAL_UMODES));
 		char *s;
 
 		s = index(aconf->host, '@');
@@ -3613,7 +3636,7 @@ void	send_umode_out(aClient *cptr, aClient *sptr, int old)
 		    }
 
 	if (cptr && MyClient(cptr))
-		send_umode(cptr, sptr, old, ALL_UMODES, buf);
+		send_umode(cptr, sptr, old, ALL_UMODES|LOCAL_UMODES, buf);
 #ifdef USE_SERVICES
 	/* buf contains all modes for local users, and iow only for remotes */
 	if (*buf)

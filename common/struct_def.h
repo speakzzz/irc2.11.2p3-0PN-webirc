@@ -216,8 +216,13 @@ typedef enum Status {
 #ifdef WHOISTLS
 #define FLAGS_TLS       0x0400 /* user is on a secure connection port (SSL/TLS) -- mh 2020-04-27 */
 #endif
+#define FLAGS_CALLERID  0x0800 /* +g: only accepted users may message (CALLERID) */
+#define FLAGS_CALLERIDS 0x1000 /* +G: same, without telling the sender */
 #define	SEND_UMODES	(FLAGS_INVISIBLE|FLAGS_OPER|FLAGS_WALLOP|FLAGS_AWAY|FLAGS_RESTRICT)
 #define	ALL_UMODES	(SEND_UMODES|FLAGS_LOCOP)
+/* modes only this server knows about: shown to the user, never sent to
+** other servers (not part of ALL_UMODES, which also feeds UNICK) */
+#define	LOCAL_UMODES	(FLAGS_CALLERID|FLAGS_CALLERIDS)
 
 /*
  * user flags macros.
@@ -521,6 +526,11 @@ struct	User	{
 	u_int	iphashv;	/* IP hash value */
 	struct User *hhnext;	/* next entry in hostname hash */
 	struct User *iphnext;	/* next entry in IP hash */
+#ifdef CALLERID
+	Link	*accepts;	/* local users: clients they accept */
+	Link	*accepted_by;	/* local clients that accept this user */
+	struct	CallerID *cid;	/* local users: caller-ID/shield state */
+#endif
 				/* sip MUST be the last in this struct!!! */
 	char	sip[1];		/* ip as a string, big enough for ipv6
 				 * allocated to real size in make_user */

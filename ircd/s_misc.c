@@ -847,6 +847,9 @@ static	void	exit_one_client(aClient *cptr, aClient *sptr, aClient *from,
 		*/
 		if (sptr->user)
 		{
+#ifdef CALLERID
+			callerid_exit(sptr);
+#endif
 			if (IsInvisible(sptr))
 			{
 				istat.is_user[1]--;

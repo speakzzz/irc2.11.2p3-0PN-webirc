@@ -239,6 +239,39 @@
 #define USE_SSL
 /* #define TLS_CIPHERS "HIGH:!aNULL:!MD5:!RC4" */
 
+/*
+ * caller-ID and flood shield (see doc/callerid.txt)
+ *
+ * CALLERID
+ *
+ *  define to add user modes +g (only users on your ACCEPT list may send
+ *  you private messages; others are told so) and +G (same, silently),
+ *  the ACCEPT command, and the automatic flood shield.  All of it is
+ *  local to this server and compatible with servers that lack it.
+ *
+ * CALLERID_MAXACCEPT		entries allowed on one ACCEPT list
+ * CALLERID_NOTIFY_INTERVAL	seconds between "blocked" replies to the
+ *				same sender, and between notices to the
+ *				blocked user
+ * CALLERID_TARGET_NOTICE	define to tell +g/+G users (at most once per
+ *				interval) that someone tried to message them
+ *
+ * FLOOD_SHIELD_SENDERS		when this many different users send private
+ *				messages to one user within FLOOD_SHIELD_WINDOW
+ *				seconds, that user only accepts messages from
+ *				their ACCEPT list (and opers) for
+ *				FLOOD_SHIELD_TIME seconds, without telling the
+ *				senders.  0 disables the shield (max 64).
+ */
+
+#define CALLERID
+#define CALLERID_MAXACCEPT 30
+#define CALLERID_NOTIFY_INTERVAL 60
+#define CALLERID_TARGET_NOTICE
+#define FLOOD_SHIELD_SENDERS 20
+#define FLOOD_SHIELD_WINDOW 10
+#define FLOOD_SHIELD_TIME 300
+
 
 /************************************************************************
  *

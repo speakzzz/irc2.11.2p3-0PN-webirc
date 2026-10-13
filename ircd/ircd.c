@@ -1240,6 +1240,11 @@ static	void	io_loop(void)
 		nextdnscheck = timeout_query_list(timeofday);
 	if (timeofday >= nextexpire)
 		nextexpire = expire_cache(timeofday);
+#ifdef CALLERID
+	/* end expired flood shields */
+	if (nextshieldcheck && timeofday >= nextshieldcheck)
+		nextshieldcheck = callerid_expire(timeofday);
+#endif
 	/*
 	** take the smaller of the two 'timed' event times as
 	** the time of next event (stops us being late :) - avalon
@@ -1256,6 +1261,10 @@ static	void	io_loop(void)
 	delay = MIN(nextdnscheck, delay);
 	delay = MIN(nextexpire, delay);
 	delay = MIN(nextpreference, delay);
+#ifdef CALLERID
+	if (nextshieldcheck)
+		delay = MIN(nextshieldcheck, delay);
+#endif
 	delay -= timeofday;
 	/*
 	** Adjust delay to something reasonable [ad hoc values]

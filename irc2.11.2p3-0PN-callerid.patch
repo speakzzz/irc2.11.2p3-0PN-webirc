@@ -1,0 +1,889 @@
+diff -ruN a/common/numeric_def.h b/common/numeric_def.h
+--- a/common/numeric_def.h	2026-10-12 21:59:39.517378776 -0400
++++ b/common/numeric_def.h	2026-10-12 21:59:39.538875372 -0400
+@@ -237,6 +237,14 @@
+ #define RPL_WHOISCHANOP      316 /* redundant and not needed but reserved */
+ #define RPL_WHOISIDLE        317
+ #define RPL_WHOISCERTFP      276 /* client certificate fingerprint (USE_SSL) */
++#define RPL_ACCEPTLIST       281 /* CALLERID, as in hybrid/ratbox */
++#define RPL_ENDOFACCEPT      282
++#define ERR_ACCEPTFULL       456
++#define ERR_ACCEPTEXIST      457
++#define ERR_ACCEPTNOT        458
++#define ERR_TARGUMODEG       716
++#define RPL_TARGNOTIFY       717
++#define RPL_UMODEGMSG        718
+ 
+ #define RPL_ENDOFWHOIS       318
+ #define RPL_WHOISCHANNELS    319
+diff -ruN a/common/parse.c b/common/parse.c
+--- a/common/parse.c	2026-10-12 21:59:39.517693137 -0400
++++ b/common/parse.c	2026-10-12 21:59:39.539150764 -0400
+@@ -52,6 +52,9 @@
+ { "INVITE",   2, MPAR, { _m(m_nop), _m(m_invite), _m(m_invite), _m(m_nop), _m(m_unreg) } },
+ { "WALLOPS",  1, MPAR, { _m(m_wallops), _m(m_nop), _m(m_nop), _m(m_nop), _m(m_unreg) } },
+ { "WEBIRC",   4, MPAR, { _m(m_nop), _m(m_nop), _m(m_nop), _m(m_nop), _m(m_webirc) } },
++#ifdef CALLERID
++{ "ACCEPT",   0, MPAR, { _m(m_nop), _m(m_accept), _m(m_accept), _m(m_nop), _m(m_unreg) } },
++#endif
+ { "PING",     1, MPAR, { _m(m_ping), _m(m_ping), _m(m_ping), _m(m_ping), _m(m_unreg) } },
+ { "PONG",     1, MPAR, { _m(m_pong), _m(m_pong), _m(m_pong), _m(m_pong), _m(m_unreg) } },
+ { "ERROR",    1, MPAR, { _m(m_error), _m(m_nop), _m(m_nop), _m(m_nop), _m(m_unreg) } },
+diff -ruN a/common/patchlevel.h b/common/patchlevel.h
+--- a/common/patchlevel.h	2026-10-12 21:59:39.518331635 -0400
++++ b/common/patchlevel.h	2026-10-12 21:59:39.539414537 -0400
+@@ -30,5 +30,5 @@
+ #define SPOOF_VERSION "1.05"
+ #define WHOISEXTRA_VERSION "1.00"
+ #define CCLALL_VERSION "1.00"
+-#define VERSION_0PN "1.06-webirc2-tls"
++#define VERSION_0PN "1.06-webirc2-tls-callerid"
+ #endif
+diff -ruN a/common/struct_def.h b/common/struct_def.h
+--- a/common/struct_def.h	2026-10-12 21:59:39.518030681 -0400
++++ b/common/struct_def.h	2026-10-12 21:59:39.539246742 -0400
+@@ -216,8 +216,13 @@
+ #ifdef WHOISTLS
+ #define FLAGS_TLS       0x0400 /* user is on a secure connection port (SSL/TLS) -- mh 2020-04-27 */
+ #endif
++#define FLAGS_CALLERID  0x0800 /* +g: only accepted users may message (CALLERID) */
++#define FLAGS_CALLERIDS 0x1000 /* +G: same, without telling the sender */
+ #define	SEND_UMODES	(FLAGS_INVISIBLE|FLAGS_OPER|FLAGS_WALLOP|FLAGS_AWAY|FLAGS_RESTRICT)
+ #define	ALL_UMODES	(SEND_UMODES|FLAGS_LOCOP)
++/* modes only this server knows about: shown to the user, never sent to
++** other servers (not part of ALL_UMODES, which also feeds UNICK) */
++#define	LOCAL_UMODES	(FLAGS_CALLERID|FLAGS_CALLERIDS)
+ 
+ /*
+  * user flags macros.
+@@ -521,6 +526,11 @@
+ 	u_int	iphashv;	/* IP hash value */
+ 	struct User *hhnext;	/* next entry in hostname hash */
+ 	struct User *iphnext;	/* next entry in IP hash */
++#ifdef CALLERID
++	Link	*accepts;	/* local users: clients they accept */
++	Link	*accepted_by;	/* local clients that accept this user */
++	struct	CallerID *cid;	/* local users: caller-ID/shield state */
++#endif
+ 				/* sip MUST be the last in this struct!!! */
+ 	char	sip[1];		/* ip as a string, big enough for ipv6
+ 				 * allocated to real size in make_user */
+diff -ruN a/common/support.c b/common/support.c
+--- a/common/support.c	2026-10-12 21:59:39.518141958 -0400
++++ b/common/support.c	2026-10-12 21:59:39.539327791 -0400
+@@ -835,6 +835,9 @@
+ 
+ 	tis[1] = (char *) MyMalloc(BUFSIZE);
+ 	sprintf(tis[1],	"PENALTY FNC EXCEPTS=e INVEX=I CASEMAPPING=ascii");
++#ifdef CALLERID
++	strcat(tis[1], " CALLERID=g");
++#endif
+ 	if (networkname)
+ 	{
+ 		strcat(tis[1], " NETWORK=");
+diff -ruN a/doc/0PN.txt b/doc/0PN.txt
+--- a/doc/0PN.txt	2026-10-12 21:59:39.520537034 -0400
++++ b/doc/0PN.txt	2026-10-12 21:59:39.540817656 -0400
+@@ -18,6 +18,7 @@
+  whoistls   v1.00 SSL/TLS RPL_WHOISTLS reply (see doc/whoistls.txt)
+  webirc     v2    WEBIRC gateway support, I-line flag W (see doc/webirc.txt)
+  tls        v1    native TLS on P-lines with flag E, CertFP (see doc/tls.txt)
++ callerid   v1    user modes +g/+G, ACCEPT, flood shield (see doc/callerid.txt)
+ 
+ config.h changes (added by patches):
+ 
+diff -ruN a/doc/callerid.txt b/doc/callerid.txt
+--- a/doc/callerid.txt	1969-12-31 19:00:00.000000000 -0500
++++ b/doc/callerid.txt	2026-10-12 21:59:39.543967904 -0400
+@@ -0,0 +1,91 @@
++Caller-ID (+g/+G) and the flood shield for irc2.11.2p3+0PN
++==========================================================
++
++Protects users against private-message floods, for example from a
++botnet.  Without it, every message sent to a user is queued on their
++connection, and enough of them get the user disconnected with
++"Max SendQ exceeded" even if their client ignores the messages.
++
++Everything here is local to the server it runs on.  A private message is
++always delivered by the recipient's server, so only the servers your
++users connect to need this; senders may be on any server, including
++IRCnet servers without it.  The modes are never sent to other servers.
++
++User modes
++----------
++
++  +g	Only users on your ACCEPT list can send you private messages and
++	notices.  Anyone else gets (at most once a minute per sender):
++
++	  :server 716 sender you :is in +g mode and only accepts messages ...
++	  :server 717 sender you :has been informed that you messaged them.
++
++  +G	The same, but silently: senders get no reply at all and cannot
++	tell that you are blocking them.
++
++Either way you get one notice per minute at most, saying who tried:
++
++	  :server 718 you sender user@host :is messaging you, and you have ...
++
++Also:
++  * IRC operators can always message you.
++  * Anyone you send a private message to is added to your ACCEPT list
++    automatically, so they can reply.
++  * NOTICEs are blocked as well, but never answered with 716/717.
++  * Your away message is not sent to blocked senders.
++  * Channel messages are not affected.
++
++Clients see "CALLERID=g" in the 005 reply.
++
++ACCEPT
++------
++
++	/ACCEPT nick[,nick...]	allow these users
++	/ACCEPT -nick		remove someone
++	/ACCEPT *		show the list (also /ACCEPT alone)
++
++An entry belongs to the person, not the nick: it follows nick changes and
++disappears when they quit, so someone who later takes the nick is not
++accepted.  The list holds CALLERID_MAXACCEPT entries (30 by default).
++
++Numerics: 281 list, 282 end of list, 456 list full, 457 already on the
++list, 458 not on the list, 401 no such nick.
++
++Flood shield
++------------
++
++Works for every user, without any mode set.  When FLOOD_SHIELD_SENDERS
++(20) different users send private messages to one user within
++FLOOD_SHIELD_WINDOW (10) seconds:
++
++  * from then on only that user's ACCEPT list and operators get through,
++    for FLOOD_SHIELD_TIME (300) seconds, extended while the flood goes on;
++  * the shield is always silent: senders get no reply;
++  * the user is told when it starts and when it ends:
++
++	*** Flood protection activated: 20 different users messaged you
++	    within 10 seconds. For the next 5 minutes only users on your
++	    ACCEPT list (and IRC operators) can message you. ...
++	*** Flood protection ended. 1234 private messages were blocked.
++
++  * operators on that server see in &NOTICES:
++
++	Flood shield activated for alice (20 senders in 10s),
++	e.g. bot17!~x@203.0.113.9 from some.server.name
++
++Messages from the first senders, before the threshold is reached, are
++still delivered.  The flood still crosses the server links before being
++dropped; what is protected is the user's own connection.
++
++Configuration (config.h)
++------------------------
++
++  CALLERID			enable all of the above
++  CALLERID_MAXACCEPT		ACCEPT list size (30)
++  CALLERID_NOTIFY_INTERVAL	seconds between 716/717 to the same sender
++				and between 718 notices to the user (60)
++  CALLERID_TARGET_NOTICE	send the 718 notice to +g/+G users
++  FLOOD_SHIELD_SENDERS		senders that trigger the shield (20, max 64,
++				0 disables the shield)
++  FLOOD_SHIELD_WINDOW		seconds to count them in (10)
++  FLOOD_SHIELD_TIME		how long the shield lasts (300)
+diff -ruN a/ircd/ircd.c b/ircd/ircd.c
+--- a/ircd/ircd.c	2026-10-12 21:59:39.530030860 -0400
++++ b/ircd/ircd.c	2026-10-12 21:59:39.545214741 -0400
+@@ -1240,6 +1240,11 @@
+ 		nextdnscheck = timeout_query_list(timeofday);
+ 	if (timeofday >= nextexpire)
+ 		nextexpire = expire_cache(timeofday);
++#ifdef CALLERID
++	/* end expired flood shields */
++	if (nextshieldcheck && timeofday >= nextshieldcheck)
++		nextshieldcheck = callerid_expire(timeofday);
++#endif
+ 	/*
+ 	** take the smaller of the two 'timed' event times as
+ 	** the time of next event (stops us being late :) - avalon
+@@ -1256,6 +1261,10 @@
+ 	delay = MIN(nextdnscheck, delay);
+ 	delay = MIN(nextexpire, delay);
+ 	delay = MIN(nextpreference, delay);
++#ifdef CALLERID
++	if (nextshieldcheck)
++		delay = MIN(nextshieldcheck, delay);
++#endif
+ 	delay -= timeofday;
+ 	/*
+ 	** Adjust delay to something reasonable [ad hoc values]
+diff -ruN a/ircd/s_callerid.c b/ircd/s_callerid.c
+--- a/ircd/s_callerid.c	1969-12-31 19:00:00.000000000 -0500
++++ b/ircd/s_callerid.c	2026-10-12 21:59:39.547068995 -0400
+@@ -0,0 +1,424 @@
++/************************************************************************
++ *   IRC - Internet Relay Chat, ircd/s_callerid.c
++ *
++ *   Caller-ID (user modes +g and +G, the ACCEPT command) and the
++ *   automatic private-message flood shield.  See doc/callerid.txt.
++ *
++ *   Everything here is local to this server: the modes are never sent
++ *   to other servers, and messages are checked when they arrive for a
++ *   user connected here, wherever the sender is on the network.
++ *
++ *   This program is free software; you can redistribute it and/or modify
++ *   it under the terms of the GNU General Public License as published by
++ *   the Free Software Foundation; either version 1, or (at your option)
++ *   any later version.
++ *
++ *   This program is distributed in the hope that it will be useful,
++ *   but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ *   GNU General Public License for more details.
++ */
++
++#include "os.h"
++#include "s_defines.h"
++#define S_CALLERID_C
++#include "s_externs.h"
++#undef S_CALLERID_C
++
++#ifdef CALLERID
++
++#ifndef CALLERID_MAXACCEPT
++# define CALLERID_MAXACCEPT	30
++#endif
++#ifndef CALLERID_NOTIFY_INTERVAL
++# define CALLERID_NOTIFY_INTERVAL 60
++#endif
++#ifndef FLOOD_SHIELD_SENDERS
++# define FLOOD_SHIELD_SENDERS	20
++#endif
++#ifndef FLOOD_SHIELD_WINDOW
++# define FLOOD_SHIELD_WINDOW	10
++#endif
++#ifndef FLOOD_SHIELD_TIME
++# define FLOOD_SHIELD_TIME	300
++#endif
++#if FLOOD_SHIELD_SENDERS > 64
++# error FLOOD_SHIELD_SENDERS must not be bigger than 64
++#endif
++
++#define	CID_NOTIFIED	16	/* senders remembered for the 716 rate limit */
++#define	CID_SENDERS	64	/* senders remembered for the shield */
++
++typedef	struct	{
++	char	uid[UIDLEN+1];
++	time_t	t;
++} cidSender;
++
++/* per local user state, allocated on first use */
++struct	CallerID {
++	time_t	last_notice;	/* last 718 sent to this user */
++	time_t	shield_until;	/* flood shield active until */
++	long	shield_blocked;	/* messages blocked during the shield */
++	int	next_notified;
++	cidSender notified[CID_NOTIFIED];	/* senders told 716 */
++	int	next_sender;
++	cidSender senders[CID_SENDERS];		/* recent distinct senders */
++};
++
++time_t	nextshieldcheck = 0;
++
++static	struct CallerID *cid_state(aClient *cptr)
++{
++	if (!cptr->user->cid)
++	{
++		cptr->user->cid = (struct CallerID *)
++			MyMalloc(sizeof(struct CallerID));
++		bzero((char *)cptr->user->cid, sizeof(struct CallerID));
++	}
++	return cptr->user->cid;
++}
++
++static	int	shield_active(aClient *cptr)
++{
++	return cptr->user->cid && cptr->user->cid->shield_until > timeofday;
++}
++
++static	Link	*find_cptr_link(Link *lp, aClient *cptr)
++{
++	for (; lp; lp = lp->next)
++		if (lp->value.cptr == cptr)
++			return lp;
++	return NULL;
++}
++
++static	int	count_links(Link *lp)
++{
++	int	n = 0;
++
++	for (; lp; lp = lp->next)
++		n++;
++	return n;
++}
++
++static	void	del_cptr_link(Link **lpp, aClient *cptr)
++{
++	Link	*lp;
++
++	for (; (lp = *lpp); lpp = &lp->next)
++		if (lp->value.cptr == cptr)
++		{
++			*lpp = lp->next;
++			free_link(lp);
++			return;
++		}
++}
++
++static	void	add_cptr_link(Link **lpp, aClient *cptr)
++{
++	Link	*lp = make_link();
++
++	lp->value.cptr = cptr;
++	lp->flags = 0;
++	lp->next = *lpp;
++	*lpp = lp;
++}
++
++/* does local user 'me_' accept messages from 'who'? */
++static	int	accepts(aClient *me_, aClient *who)
++{
++	return find_cptr_link(me_->user->accepts, who) != NULL;
++}
++
++/* 0 = added, 1 = already there, -1 = list full */
++static	int	add_accept(aClient *me_, aClient *who)
++{
++	if (accepts(me_, who))
++		return 1;
++	if (count_links(me_->user->accepts) >= CALLERID_MAXACCEPT)
++		return -1;
++	add_cptr_link(&me_->user->accepts, who);
++	add_cptr_link(&who->user->accepted_by, me_);
++	return 0;
++}
++
++static	int	del_accept(aClient *me_, aClient *who)
++{
++	if (!accepts(me_, who))
++		return -1;
++	del_cptr_link(&me_->user->accepts, who);
++	del_cptr_link(&who->user->accepted_by, me_);
++	return 0;
++}
++
++/*
++ * Remember 'uid' in a small table; returns 1 if it was already there and
++ * younger than 'maxage' seconds.
++ */
++static	int	seen_recently(cidSender *tab, int size, int *next,
++			char *uid, int maxage)
++{
++	int	i;
++
++	for (i = 0; i < size; i++)
++		if (tab[i].t && timeofday - tab[i].t < maxage &&
++		    !strcmp(tab[i].uid, uid))
++			return 1;
++	strncpyzt(tab[*next].uid, uid, sizeof(tab[*next].uid));
++	tab[*next].t = timeofday;
++	*next = (*next + 1) % size;
++	return 0;
++}
++
++static	int	count_recent(cidSender *tab, int size, int maxage)
++{
++	int	i, n = 0;
++
++	for (i = 0; i < size; i++)
++		if (tab[i].t && timeofday - tab[i].t < maxage)
++			n++;
++	return n;
++}
++
++/*
++ * Count distinct senders hitting 'target'; switch the shield on (or
++ * extend it) when FLOOD_SHIELD_SENDERS of them arrive within
++ * FLOOD_SHIELD_WINDOW seconds.
++ */
++static	void	shield_count(aClient *sptr, aClient *target)
++{
++#if FLOOD_SHIELD_SENDERS > 0
++	struct	CallerID *cid = cid_state(target);
++	int	n, was_active = shield_active(target);
++
++	if (seen_recently(cid->senders, CID_SENDERS, &cid->next_sender,
++		sptr->user->uid, FLOOD_SHIELD_WINDOW))
++		return;
++	n = count_recent(cid->senders, CID_SENDERS, FLOOD_SHIELD_WINDOW);
++	if (n < FLOOD_SHIELD_SENDERS)
++		return;
++
++	cid->shield_until = timeofday + FLOOD_SHIELD_TIME;
++	if (!nextshieldcheck || nextshieldcheck > cid->shield_until)
++		nextshieldcheck = cid->shield_until;
++	if (was_active)
++		return;		/* still flooded: just extended */
++
++	cid->shield_blocked = 0;
++	sendto_one(target, ":%s NOTICE %s :*** Flood protection activated: "
++		"%d different users messaged you within %d seconds. For the "
++		"next %d minutes only users on your ACCEPT list (and IRC "
++		"operators) can message you. Use /ACCEPT nick to allow "
++		"someone.", ME, target->name, n, FLOOD_SHIELD_WINDOW,
++		(FLOOD_SHIELD_TIME + 59) / 60);
++	sendto_flag(SCH_NOTICE, "Flood shield activated for %s (%d senders "
++		"in %ds), e.g. %s!%s@%s from %s", target->name, n,
++		FLOOD_SHIELD_WINDOW, sptr->name, sptr->user->username,
++		sptr->user->host, sptr->user->server);
++#endif
++}
++
++/*
++ * Called for every PRIVMSG/NOTICE addressed to a user.
++ * Returns 1 if the message may be delivered, 0 if it must be dropped.
++ */
++int	callerid_check(aClient *sptr, aClient *target, int notice)
++{
++	struct	CallerID *cid;
++	int	blocking, silent;
++
++	if (!MyConnect(target) || !target->user || sptr == target)
++		return 1;
++	/* servers, services and operators always get through */
++	if (!IsPerson(sptr) || !sptr->user || IsAnOper(sptr))
++		return 1;
++	if (accepts(target, sptr))
++		return 1;
++
++	shield_count(sptr, target);
++
++	blocking = (target->user->flags & (FLAGS_CALLERID|FLAGS_CALLERIDS))
++		|| shield_active(target);
++	if (!blocking)
++		return 1;
++
++	cid = cid_state(target);
++	silent = (target->user->flags & FLAGS_CALLERIDS) ||
++		shield_active(target);
++
++	if (shield_active(target))
++	{
++		cid->shield_blocked++;
++		return 0;	/* the shield is always silent */
++	}
++
++	/* tell the sender, at most once per interval per target */
++	if (!silent && !notice &&
++	    !seen_recently(cid->notified, CID_NOTIFIED, &cid->next_notified,
++		sptr->user->uid, CALLERID_NOTIFY_INTERVAL))
++	{
++		sendto_one(sptr, replies[ERR_TARGUMODEG], ME, sptr->name,
++			target->name);
++		sendto_one(sptr, replies[RPL_TARGNOTIFY], ME, sptr->name,
++			target->name);
++	}
++
++#ifdef CALLERID_TARGET_NOTICE
++	/* tell the target, at most once per interval in total */
++	if (timeofday - cid->last_notice >= CALLERID_NOTIFY_INTERVAL)
++	{
++		cid->last_notice = timeofday;
++		sendto_one(target, replies[RPL_UMODEGMSG], ME, target->name,
++			sptr->name, sptr->user->username, sptr->user->host);
++	}
++#endif
++	return 0;
++}
++
++/*
++ * A +g/+G user who sends a PRIVMSG to someone accepts their replies.
++ */
++void	callerid_sent(aClient *sptr, aClient *target)
++{
++	if (!MyConnect(sptr) || !sptr->user || !target->user ||
++	    sptr == target || !IsPerson(target))
++		return;
++	if (!(sptr->user->flags & (FLAGS_CALLERID|FLAGS_CALLERIDS)) &&
++	    !shield_active(sptr))
++		return;
++	(void)add_accept(sptr, target);
++}
++
++/* remove every reference to a user that is leaving the network */
++void	callerid_exit(aClient *cptr)
++{
++	Link	*lp, *next;
++
++	if (!cptr->user)
++		return;
++	for (lp = cptr->user->accepted_by; lp; lp = next)
++	{
++		next = lp->next;
++		del_cptr_link(&lp->value.cptr->user->accepts, cptr);
++		free_link(lp);
++	}
++	cptr->user->accepted_by = NULL;
++	for (lp = cptr->user->accepts; lp; lp = next)
++	{
++		next = lp->next;
++		del_cptr_link(&lp->value.cptr->user->accepted_by, cptr);
++		free_link(lp);
++	}
++	cptr->user->accepts = NULL;
++	if (cptr->user->cid)
++	{
++		MyFree(cptr->user->cid);
++		cptr->user->cid = NULL;
++	}
++}
++
++/* end expired shields; returns the time of the next check (0 = none) */
++time_t	callerid_expire(time_t now)
++{
++	int	i;
++	aClient	*acptr;
++	struct	CallerID *cid;
++	time_t	next = 0;
++
++	for (i = highest_fd; i >= 0; i--)
++	{
++		if (!(acptr = local[i]) || !IsPerson(acptr) ||
++		    !(cid = acptr->user->cid) || !cid->shield_until)
++			continue;
++		if (cid->shield_until > now)
++		{
++			if (!next || cid->shield_until < next)
++				next = cid->shield_until;
++			continue;
++		}
++		cid->shield_until = 0;
++		sendto_one(acptr, ":%s NOTICE %s :*** Flood protection ended. "
++			"%ld private message%s blocked.", ME, acptr->name,
++			cid->shield_blocked, cid->shield_blocked == 1 ?
++			" was" : "s were");
++	}
++	return next;
++}
++
++/*
++ * ACCEPT [nick,nick,-nick,...]	add or remove
++ * ACCEPT *			list (also with no parameter)
++ */
++int	m_accept(aClient *cptr, aClient *sptr, int parc, char *parv[])
++{
++	char	*p = NULL, *nick, *list;
++	aClient	*acptr;
++	Link	*lp;
++	char	lbuf[BUFSIZE];
++	int	del, len;
++
++	if (!MyConnect(sptr) || !sptr->user)
++		return 0;
++
++	if (parc < 2 || BadPtr(parv[1]) || !strcmp(parv[1], "*"))
++	{
++		lbuf[0] = '\0';
++		len = 0;
++		for (lp = sptr->user->accepts; lp; lp = lp->next)
++		{
++			if (len + strlen(lp->value.cptr->name) + 2 > 400)
++			{
++				sendto_one(sptr, replies[RPL_ACCEPTLIST], ME,
++					sptr->name, lbuf);
++				lbuf[0] = '\0';
++				len = 0;
++			}
++			if (len)
++				lbuf[len++] = ' ';
++			strcpy(lbuf + len, lp->value.cptr->name);
++			len += strlen(lp->value.cptr->name);
++		}
++		if (len)
++			sendto_one(sptr, replies[RPL_ACCEPTLIST], ME,
++				sptr->name, lbuf);
++		sendto_one(sptr, replies[RPL_ENDOFACCEPT], ME, sptr->name);
++		return 1;
++	}
++
++	list = parv[1];
++	for (nick = strtoken(&p, list, ","); nick;
++	     nick = strtoken(&p, NULL, ","))
++	{
++		del = (*nick == '-');
++		if (del)
++			nick++;
++		if (!*nick)
++			continue;
++		if (!(acptr = find_person(nick, NULL)) || !acptr->user)
++		{
++			sendto_one(sptr, replies[ERR_NOSUCHNICK], ME,
++				sptr->name, nick);
++			continue;
++		}
++		if (del)
++		{
++			if (del_accept(sptr, acptr) < 0)
++				sendto_one(sptr, replies[ERR_ACCEPTNOT], ME,
++					sptr->name, acptr->name);
++			continue;
++		}
++		switch (add_accept(sptr, acptr))
++		{
++		case 1:
++			sendto_one(sptr, replies[ERR_ACCEPTEXIST], ME,
++				sptr->name, acptr->name);
++			break;
++		case -1:
++			sendto_one(sptr, replies[ERR_ACCEPTFULL], ME,
++				sptr->name);
++			return 1;
++		}
++	}
++	return 1;
++}
++
++#endif /* CALLERID */
+diff -ruN a/ircd/s_callerid_ext.h b/ircd/s_callerid_ext.h
+--- a/ircd/s_callerid_ext.h	1969-12-31 19:00:00.000000000 -0500
++++ b/ircd/s_callerid_ext.h	2026-10-12 21:59:39.544652093 -0400
+@@ -0,0 +1,20 @@
++/************************************************************************
++ *   IRC - Internet Relay Chat, ircd/s_callerid_ext.h
++ *
++ *   External definitions for functions defined in ircd/s_callerid.c.
++ */
++
++#ifndef S_CALLERID_C
++#define EXTERN extern
++#else /* S_CALLERID_C */
++#define EXTERN
++#endif /* S_CALLERID_C */
++#ifdef	CALLERID
++EXTERN time_t nextshieldcheck;
++EXTERN int callerid_check (aClient *sptr, aClient *target, int notice);
++EXTERN void callerid_sent (aClient *sptr, aClient *target);
++EXTERN void callerid_exit (aClient *cptr);
++EXTERN time_t callerid_expire (time_t now);
++EXTERN int m_accept (aClient *cptr, aClient *sptr, int parc, char *parv[]);
++#endif /* CALLERID */
++#undef EXTERN
+diff -ruN a/ircd/s_err.c b/ircd/s_err.c
+--- a/ircd/s_err.c	2026-10-12 21:59:39.532506681 -0400
++++ b/ircd/s_err.c	2026-10-12 21:59:39.546224602 -0400
+@@ -32,7 +32,7 @@
+ /* 001 RPL_WELCOME  */	":%s 001 %s :Welcome to the Internet Relay Network %s",
+ /* 002 RPL_YOURHOST */	":%s 002 %s :Your host is %s, running version %s",
+ /* 003 RPL_CREATED */	":%s 003 %s :This server was created %s",
+-/* 004 RPL_MYINFO */	":%s 004 %s %s %s aoOirw abeiIklmnoOpqrRstv",
++/* 004 RPL_MYINFO */	":%s 004 %s %s %s aGgoOirw abeiIklmnoOpqrRstv",
+ /* 005 RPL_ISUPPORT */  ":%s 005 %s %s :are supported by this server",
+ /* 006 */ (char *)NULL,
+ /* 007 */ (char *)NULL,
+@@ -309,8 +309,8 @@
+ /* 278 */ (char *)NULL,
+ /* 279 */ (char *)NULL,
+ /* 280 */ (char *)NULL,
+-/* 281 */ (char *)NULL,
+-/* 282 */ (char *)NULL,
++/* 281 RPL_ACCEPTLIST */ ":%s 281 %s :%s",
++/* 282 RPL_ENDOFACCEPT */ ":%s 282 %s :End of /ACCEPT list.",
+ /* 283 */ (char *)NULL,
+ /* 284 */ (char *)NULL,
+ /* 285 */ (char *)NULL,
+@@ -515,9 +515,9 @@
+ /* 453 */ (char *)NULL,
+ /* 454 */ (char *)NULL,
+ /* 455 */ (char *)NULL,
+-/* 456 */ (char *)NULL,
+-/* 457 */ (char *)NULL,
+-/* 458 */ (char *)NULL,
++/* 456 ERR_ACCEPTFULL */ ":%s 456 %s :Accept list is full",
++/* 457 ERR_ACCEPTEXIST */ ":%s 457 %s %s :is already on your accept list",
++/* 458 ERR_ACCEPTNOT */ ":%s 458 %s %s :is not on your accept list",
+ /* 459 */ (char *)NULL,
+ /* 460 */ (char *)NULL,
+ /* 461 ERR_NEEDMOREPARAMS */	":%s 461 %s %s :Not enough parameters",
+@@ -783,9 +783,9 @@
+ /* 713 */ (char *)NULL,
+ /* 714 */ (char *)NULL,
+ /* 715 */ (char *)NULL,
+-/* 716 */ (char *)NULL,
+-/* 717 */ (char *)NULL,
+-/* 718 */ (char *)NULL,
++/* 716 ERR_TARGUMODEG */ ":%s 716 %s %s :is in +g mode and only accepts messages from people they know",
++/* 717 RPL_TARGNOTIFY */ ":%s 717 %s %s :has been informed that you messaged them.",
++/* 718 RPL_UMODEGMSG */ ":%s 718 %s %s %s@%s :is messaging you, and you have user mode +g/+G (use /ACCEPT to allow)",
+ /* 719 */ (char *)NULL,
+ /* 720 */ (char *)NULL,
+ /* 721 */ (char *)NULL,
+diff -ruN a/ircd/s_externs.h b/ircd/s_externs.h
+--- a/ircd/s_externs.h	2026-10-12 21:59:39.534868661 -0400
++++ b/ircd/s_externs.h	2026-10-12 21:59:39.547037656 -0400
+@@ -48,6 +48,7 @@
+ #include "s_user_ext.h"
+ #include "s_zip_ext.h"
+ #include "s_tls_ext.h"
++#include "s_callerid_ext.h"
+ #include "s_id_ext.h"
+ #include "send_ext.h"
+ #include "support_ext.h"
+diff -ruN a/ircd/s_misc.c b/ircd/s_misc.c
+--- a/ircd/s_misc.c	2026-10-12 21:59:39.532848959 -0400
++++ b/ircd/s_misc.c	2026-10-12 21:59:39.546296565 -0400
+@@ -847,6 +847,9 @@
+ 		*/
+ 		if (sptr->user)
+ 		{
++#ifdef CALLERID
++			callerid_exit(sptr);
++#endif
+ 			if (IsInvisible(sptr))
+ 			{
+ 				istat.is_user[1]--;
+diff -ruN a/ircd/s_user.c b/ircd/s_user.c
+--- a/ircd/s_user.c	2026-10-12 21:59:39.533950627 -0400
++++ b/ircd/s_user.c	2026-10-12 21:59:39.546675148 -0400
+@@ -215,6 +215,10 @@
+ 				 FLAGS_WALLOP, 'w',
+ 				 FLAGS_RESTRICT, 'r',
+ 				 FLAGS_AWAY, 'a',
++#ifdef CALLERID
++				 FLAGS_CALLERID, 'g',
++				 FLAGS_CALLERIDS, 'G',
++#endif
+ 				 0, 0 };
+ 
+ /*
+@@ -1719,6 +1723,14 @@
+ 			&& (acptr = find_uid(nick, NULL))) || 
+ 			(acptr = find_person(nick, NULL)))
+ 		    {
++#ifdef CALLERID
++			/* +g/+G and the flood shield, for users on this
++			** server; checked before the away reply leaks */
++			if (!callerid_check(sptr, acptr, notice))
++				continue;
++			if (!notice)
++				callerid_sent(sptr, acptr);
++#endif
+ 			if (!notice && MyConnect(sptr) &&
+ 			    acptr->user && (acptr->user->flags & FLAGS_AWAY))
+ 				send_away(sptr, acptr);
+@@ -1815,6 +1827,9 @@
+ 			    !mycmp(user+1, acptr->user->username) &&
+ 			    !mycmp(host+1, acptr->user->host))
+ 			    {
++#ifdef CALLERID
++				if (callerid_check(sptr, acptr, notice))
++#endif
+ 				sendto_prefix_one(acptr, sptr, ":%s %s %s :%s",
+ 						  parv[0], cmd, nick, parv[2]);
+ 				*user = '!';
+@@ -1857,7 +1872,11 @@
+ 				*--host = '%';
+ 			if (acptr)
+ 			    {
+-				if (count == 1)
++				if (count == 1
++#ifdef CALLERID
++				    && callerid_check(sptr, acptr, notice)
++#endif
++				    )
+ 					sendto_prefix_one(acptr, sptr,
+ 							  ":%s %s %s :%s",
+ 					 		  parv[0], cmd,
+@@ -1879,7 +1898,11 @@
+ 			*--host = '%';
+ 			if (acptr)
+ 			    {
+-				if (count == 1)
++				if (count == 1
++#ifdef CALLERID
++				    && callerid_check(sptr, acptr, notice)
++#endif
++				    )
+ 					sendto_prefix_one(acptr, sptr,
+ 							  ":%s %s %s :%s",
+ 					 		  parv[0], cmd,
+@@ -3093,7 +3116,7 @@
+ 	if ((aconf->status & CONF_OPS) &&
+ 	    pwok && !attach_conf(sptr, aconf))
+ 	{
+-		int old = (sptr->user->flags & ALL_UMODES);
++		int old = (sptr->user->flags & (ALL_UMODES|LOCAL_UMODES));
+ 		char *s;
+ 
+ 		s = index(aconf->host, '@');
+@@ -3613,7 +3636,7 @@
+ 		    }
+ 
+ 	if (cptr && MyClient(cptr))
+-		send_umode(cptr, sptr, old, ALL_UMODES, buf);
++		send_umode(cptr, sptr, old, ALL_UMODES|LOCAL_UMODES, buf);
+ #ifdef USE_SERVICES
+ 	/* buf contains all modes for local users, and iow only for remotes */
+ 	if (*buf)
+diff -ruN a/support/Makefile.in b/support/Makefile.in
+--- a/support/Makefile.in	2026-10-12 21:59:39.535121908 -0400
++++ b/support/Makefile.in	2026-10-12 21:59:39.547117113 -0400
+@@ -167,7 +167,8 @@
+ IRCD_OBJS = channel.o class.o hash.o ircd.o list.o res.o s_auth.o \
+               s_bsd.o s_conf.o s_debug.o s_err.o s_id.o s_misc.o s_numeric.o \
+               s_send.o s_serv.o s_service.o s_user.o s_zip.o whowas.o \
+-              res_init.o res_comp.o res_mkquery.o patricia.o s_tls.o
++              res_init.o res_comp.o res_mkquery.o patricia.o s_tls.o \
++              s_callerid.o
+ 
+ IAUTH_COMMON_OBJS = clsupport.o clmatch.o # This is a little evil
+ IAUTH_OBJS = iauth.o a_conf.o a_io.o a_log.o \
+@@ -391,6 +392,9 @@
+ s_user.o: ../ircd/s_user.c setup.h config.h ../common/struct_def.h
+ 	$(CC) $(S_CFLAGS) -DFNAME_USERLOG="\"$(FNAME_USERLOG)\"" -DFNAME_CONNLOG="\"$(FNAME_CONNLOG)\"" -DFNAME_OPERLOG="\"$(FNAME_OPERLOG)\"" -c -o $@ ../ircd/s_user.c
+ 
++s_callerid.o: ../ircd/s_callerid.c setup.h config.h ../common/struct_def.h
++	$(CC) $(S_CFLAGS) -c -o $@ ../ircd/s_callerid.c
++
+ s_tls.o: ../ircd/s_tls.c setup.h config.h ../common/struct_def.h
+ 	$(CC) $(S_CFLAGS) -DTLS_CERT_FILE="\"$(TLS_CERT_PATH)\"" \
+ 	-DTLS_KEY_FILE="\"$(TLS_KEY_PATH)\"" -c -o $@ ../ircd/s_tls.c
+diff -ruN a/support/config.h.dist b/support/config.h.dist
+--- a/support/config.h.dist	2026-10-12 21:59:39.535462527 -0400
++++ b/support/config.h.dist	2026-10-12 21:59:39.547247392 -0400
+@@ -239,6 +239,39 @@
+ #define USE_SSL
+ /* #define TLS_CIPHERS "HIGH:!aNULL:!MD5:!RC4" */
+ 
++/*
++ * caller-ID and flood shield (see doc/callerid.txt)
++ *
++ * CALLERID
++ *
++ *  define to add user modes +g (only users on your ACCEPT list may send
++ *  you private messages; others are told so) and +G (same, silently),
++ *  the ACCEPT command, and the automatic flood shield.  All of it is
++ *  local to this server and compatible with servers that lack it.
++ *
++ * CALLERID_MAXACCEPT		entries allowed on one ACCEPT list
++ * CALLERID_NOTIFY_INTERVAL	seconds between "blocked" replies to the
++ *				same sender, and between notices to the
++ *				blocked user
++ * CALLERID_TARGET_NOTICE	define to tell +g/+G users (at most once per
++ *				interval) that someone tried to message them
++ *
++ * FLOOD_SHIELD_SENDERS		when this many different users send private
++ *				messages to one user within FLOOD_SHIELD_WINDOW
++ *				seconds, that user only accepts messages from
++ *				their ACCEPT list (and opers) for
++ *				FLOOD_SHIELD_TIME seconds, without telling the
++ *				senders.  0 disables the shield (max 64).
++ */
++
++#define CALLERID
++#define CALLERID_MAXACCEPT 30
++#define CALLERID_NOTIFY_INTERVAL 60
++#define CALLERID_TARGET_NOTICE
++#define FLOOD_SHIELD_SENDERS 20
++#define FLOOD_SHIELD_WINDOW 10
++#define FLOOD_SHIELD_TIME 300
++
+ 
+ /************************************************************************
+  *

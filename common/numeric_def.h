@@ -237,6 +237,14 @@
 #define RPL_WHOISCHANOP      316 /* redundant and not needed but reserved */
 #define RPL_WHOISIDLE        317
 #define RPL_WHOISCERTFP      276 /* client certificate fingerprint (USE_SSL) */
+#define RPL_ACCEPTLIST       281 /* CALLERID, as in hybrid/ratbox */
+#define RPL_ENDOFACCEPT      282
+#define ERR_ACCEPTFULL       456
+#define ERR_ACCEPTEXIST      457
+#define ERR_ACCEPTNOT        458
+#define ERR_TARGUMODEG       716
+#define RPL_TARGNOTIFY       717
+#define RPL_UMODEGMSG        718
 
 #define RPL_ENDOFWHOIS       318
 #define RPL_WHOISCHANNELS    319

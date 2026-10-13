@@ -18,6 +18,7 @@ patches included:
  whoistls   v1.00 SSL/TLS RPL_WHOISTLS reply (see doc/whoistls.txt)
  webirc     v2    WEBIRC gateway support, I-line flag W (see doc/webirc.txt)
  tls        v1    native TLS on P-lines with flag E, CertFP (see doc/tls.txt)
+ callerid   v1    user modes +g/+G, ACCEPT, flood shield (see doc/callerid.txt)
 
 config.h changes (added by patches):
 

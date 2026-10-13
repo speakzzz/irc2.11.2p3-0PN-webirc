@@ -1,0 +1,91 @@
+Caller-ID (+g/+G) and the flood shield for irc2.11.2p3+0PN
+==========================================================
+
+Protects users against private-message floods, for example from a
+botnet.  Without it, every message sent to a user is queued on their
+connection, and enough of them get the user disconnected with
+"Max SendQ exceeded" even if their client ignores the messages.
+
+Everything here is local to the server it runs on.  A private message is
+always delivered by the recipient's server, so only the servers your
+users connect to need this; senders may be on any server, including
+IRCnet servers without it.  The modes are never sent to other servers.
+
+User modes
+----------
+
+  +g	Only users on your ACCEPT list can send you private messages and
+	notices.  Anyone else gets (at most once a minute per sender):
+
+	  :server 716 sender you :is in +g mode and only accepts messages ...
+	  :server 717 sender you :has been informed that you messaged them.
+
+  +G	The same, but silently: senders get no reply at all and cannot
+	tell that you are blocking them.
+
+Either way you get one notice per minute at most, saying who tried:
+
+	  :server 718 you sender user@host :is messaging you, and you have ...
+
+Also:
+  * IRC operators can always message you.
+  * Anyone you send a private message to is added to your ACCEPT list
+    automatically, so they can reply.
+  * NOTICEs are blocked as well, but never answered with 716/717.
+  * Your away message is not sent to blocked senders.
+  * Channel messages are not affected.
+
+Clients see "CALLERID=g" in the 005 reply.
+
+ACCEPT
+------
+
+	/ACCEPT nick[,nick...]	allow these users
+	/ACCEPT -nick		remove someone
+	/ACCEPT *		show the list (also /ACCEPT alone)
+
+An entry belongs to the person, not the nick: it follows nick changes and
+disappears when they quit, so someone who later takes the nick is not
+accepted.  The list holds CALLERID_MAXACCEPT entries (30 by default).
+
+Numerics: 281 list, 282 end of list, 456 list full, 457 already on the
+list, 458 not on the list, 401 no such nick.
+
+Flood shield
+------------
+
+Works for every user, without any mode set.  When FLOOD_SHIELD_SENDERS
+(20) different users send private messages to one user within
+FLOOD_SHIELD_WINDOW (10) seconds:
+
+  * from then on only that user's ACCEPT list and operators get through,
+    for FLOOD_SHIELD_TIME (300) seconds, extended while the flood goes on;
+  * the shield is always silent: senders get no reply;
+  * the user is told when it starts and when it ends:
+
+	*** Flood protection activated: 20 different users messaged you
+	    within 10 seconds. For the next 5 minutes only users on your
+	    ACCEPT list (and IRC operators) can message you. ...
+	*** Flood protection ended. 1234 private messages were blocked.
+
+  * operators on that server see in &NOTICES:
+
+	Flood shield activated for alice (20 senders in 10s),
+	e.g. bot17!~x@203.0.113.9 from some.server.name
+
+Messages from the first senders, before the threshold is reached, are
+still delivered.  The flood still crosses the server links before being
+dropped; what is protected is the user's own connection.
+
+Configuration (config.h)
+------------------------
+
+  CALLERID			enable all of the above
+  CALLERID_MAXACCEPT		ACCEPT list size (30)
+  CALLERID_NOTIFY_INTERVAL	seconds between 716/717 to the same sender
+				and between 718 notices to the user (60)
+  CALLERID_TARGET_NOTICE	send the 718 notice to +g/+G users
+  FLOOD_SHIELD_SENDERS		senders that trigger the shield (20, max 64,
+				0 disables the shield)
+  FLOOD_SHIELD_WINDOW		seconds to count them in (10)
+  FLOOD_SHIELD_TIME		how long the shield lasts (300)
