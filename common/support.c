@@ -806,8 +806,10 @@ char	*make_version(void)
 		sprintf(ver + strlen(ver), "%c%d", DEVLEVEL, dv);
 	if (pl)	/* patchlevel */
 		sprintf(ver + strlen(ver), "p%d", pl);
-	strcat(ver, "+0PNv");
-	strcat(ver, VERSION_0PN);
+	/* bounded: a VERSION_0PN longer than VERSIONLEN allows is
+	** truncated instead of overflowing ver[] */
+	strncat(ver, "+0PNv", sizeof(ver) - strlen(ver) - 1);
+	strncat(ver, VERSION_0PN, sizeof(ver) - strlen(ver) - 1);
 	return mystrdup(ver);
 }
 
